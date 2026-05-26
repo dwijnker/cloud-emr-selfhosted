@@ -101,14 +101,14 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      <Route path={"/:id/care-gaps"}>
+      <Route path={"/patients/:id/care-gaps"}>
         {(params) => (
           <DashboardLayout>
             <CareGaps />
           </DashboardLayout>
         )}
       </Route>
-      <Route path={"/:id/intake"}>
+      <Route path={"/patients/:id/intake"}>
         {(params) => (
           <DashboardLayout>
             <MedicalIntake />
