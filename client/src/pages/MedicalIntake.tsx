@@ -43,6 +43,7 @@ export default function MedicalIntake() {
         // Load initial greeting from assistant
         const greeting = await chatMutation.mutateAsync({
           medicalIntakeId: newIntakeId,
+          patientId,
           message: "Hello, I'm ready to help. What brings you in today?",
         });
 
@@ -78,6 +79,7 @@ export default function MedicalIntake() {
     try {
       const response = await chatMutation.mutateAsync({
         medicalIntakeId: intakeId,
+        patientId,
         message: userMessage,
       });
 
@@ -93,7 +95,7 @@ export default function MedicalIntake() {
     if (!intakeId) return;
 
     try {
-      await completeIntakeMutation.mutateAsync({ id: intakeId });
+      await completeIntakeMutation.mutateAsync({ id: intakeId, patientId });
       setIntakeStatus("completed");
       toast.success("Medical intake completed successfully");
       // Add completion message

@@ -148,6 +148,22 @@ export async function getIntakeSymptoms(medicalIntakeId: number) {
 }
 
 /**
+ * Get a single symptom by ID (for ownership validation)
+ */
+export async function getIntakeSymptomById(symptomId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .select()
+    .from(intakeSymptoms)
+    .where(eq(intakeSymptoms.id, symptomId))
+    .limit(1);
+
+  return result[0];
+}
+
+/**
  * Delete a symptom
  */
 export async function deleteIntakeSymptom(symptomId: number) {

@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   createPatient,
@@ -55,6 +56,7 @@ import {
   getIntakeChatMessages,
   addIntakeSymptom,
   getIntakeSymptoms,
+  getIntakeSymptomById,
   deleteIntakeSymptom,
 } from "./intake";
 import { invokeLLM } from "./_core/llm";
@@ -926,6 +928,8 @@ export const appRouter = router({
       }),
   }),
   intake: router({
+    // Helper: verify that an intake belongs to the given patientId.
+    // Used internally by procedures that receive an intakeId directly.
     create: protectedProcedure
       .input(
         z.object({
@@ -939,24 +943,35 @@ export const appRouter = router({
         });
       }),
     getById: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), patientId: z.number() }))
       .query(async ({ input }) => {
-        return await getMedicalIntake(input.id);
+        const intake = await getMedicalIntake(input.id);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
+        return intake;
       }),
     getPatientIntakes: protectedProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
+        // Returns only intakes scoped to the requested patient
         return await getPatientIntakes(input.patientId);
       }),
     complete: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), patientId: z.number() }))
       .mutation(async ({ input }) => {
+        // Verify ownership before completing
+        const intake = await getMedicalIntake(input.id);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
         return await completeMedicalIntake(input.id);
       }),
     addMessage: protectedProcedure
       .input(
         z.object({
           medicalIntakeId: z.number(),
+          patientId: z.number(),
           role: z.enum(["user", "assistant"]),
           content: z.string(),
           messageType: z.enum(["question", "response", "symptom_collected", "history_collected"]).optional(),
@@ -964,6 +979,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Verify ownership before adding message
+        const intake = await getMedicalIntake(input.medicalIntakeId);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
         return await addIntakeChatMessage(input.medicalIntakeId, {
           role: input.role,
           content: input.content,
@@ -972,14 +992,20 @@ export const appRouter = router({
         });
       }),
     getMessages: protectedProcedure
-      .input(z.object({ medicalIntakeId: z.number() }))
+      .input(z.object({ medicalIntakeId: z.number(), patientId: z.number() }))
       .query(async ({ input }) => {
+        // Verify ownership before returning messages
+        const intake = await getMedicalIntake(input.medicalIntakeId);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
         return await getIntakeChatMessages(input.medicalIntakeId);
       }),
     addSymptom: protectedProcedure
       .input(
         z.object({
           medicalIntakeId: z.number(),
+          patientId: z.number(),
           symptom: z.string(),
           severity: z.enum(["mild", "moderate", "severe"]).optional(),
           duration: z.string().optional(),
@@ -989,6 +1015,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Verify ownership before adding symptom
+        const intake = await getMedicalIntake(input.medicalIntakeId);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
         return await addIntakeSymptom(input.medicalIntakeId, {
           symptom: input.symptom,
           severity: input.severity,
@@ -999,25 +1030,46 @@ export const appRouter = router({
         });
       }),
     getSymptoms: protectedProcedure
-      .input(z.object({ medicalIntakeId: z.number() }))
+      .input(z.object({ medicalIntakeId: z.number(), patientId: z.number() }))
       .query(async ({ input }) => {
+        // Verify ownership before returning symptoms
+        const intake = await getMedicalIntake(input.medicalIntakeId);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
         return await getIntakeSymptoms(input.medicalIntakeId);
       }),
     deleteSymptom: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), patientId: z.number() }))
       .mutation(async ({ input }) => {
+        // Verify the symptom belongs to an intake owned by the given patient
+        const symptom = await getIntakeSymptomById(input.id);
+        if (!symptom) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Symptom not found" });
+        }
+        const intake = await getMedicalIntake(symptom.medicalIntakeId);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: symptom does not belong to this patient" });
+        }
         return await deleteIntakeSymptom(input.id);
       }),
     chat: protectedProcedure
       .input(
         z.object({
           medicalIntakeId: z.number(),
+          patientId: z.number(),
           message: z.string(),
         })
       )
       .mutation(async ({ input }) => {
-        const existingMessages = await getIntakeChatMessages(input.medicalIntakeId);
+        // Verify ownership: ensure this intake belongs to the stated patient
+        // before loading its messages or sending them to the LLM.
         const intake = await getMedicalIntake(input.medicalIntakeId);
+        if (!intake || intake.patientId !== input.patientId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: intake does not belong to this patient" });
+        }
+
+        const existingMessages = await getIntakeChatMessages(input.medicalIntakeId);
 
         const conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = existingMessages.map((msg) => ({
           role: msg.role as "user" | "assistant",
