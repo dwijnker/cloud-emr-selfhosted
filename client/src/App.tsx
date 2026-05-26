@@ -47,7 +47,7 @@ function Router() {
       <Route path={"/patients/:id/chart"}>
         {(params) => (
           <DashboardLayout>
-            <ClinicalChart patientId={parseInt(params.id)} />
+            <ClinicalChart />
           </DashboardLayout>
         )}
       </Route>
