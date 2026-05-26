@@ -68,7 +68,7 @@ function Router() {
       <Route path={"/patients/:id/orders"}>
         {(params) => (
           <DashboardLayout>
-            <Orders patientId={parseInt(params.id)} />
+            <Orders />
           </DashboardLayout>
         )}
       </Route>
@@ -89,21 +89,21 @@ function Router() {
       <Route path={"/patients/:id/referrals"}>
         {(params) => (
           <DashboardLayout>
-            <Referrals patientId={parseInt(params.id)} />
+            <Referrals />
           </DashboardLayout>
         )}
       </Route>
       <Route path={"/patients/:id/prescriptions"}>
         {(params) => (
           <DashboardLayout>
-            <Prescriptions patientId={parseInt(params.id)} />
+            <Prescriptions />
           </DashboardLayout>
         )}
       </Route>
       <Route path={"/patients/:id/care-gaps"}>
         {(params) => (
           <DashboardLayout>
-            <CareGaps patientId={parseInt(params.id)} />
+            <CareGaps />
           </DashboardLayout>
         )}
       </Route>
