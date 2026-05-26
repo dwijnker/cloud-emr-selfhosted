@@ -16,11 +16,11 @@
 ## Phase 3: Patient Management
 - [x] List patients with search and filtering
 - [x] Create new patient form with full demographic data
-- [ ] View patient details page with profile photo
-- [ ] Edit patient information
-- [ ] Delete patient records (soft delete)
-- [ ] Patient insurance management (add, edit, delete)
-- [ ] Provider team assignment and management
+- [x] View patient details page with profile photo
+- [x] Edit patient information
+- [x] Delete patient records (soft delete)
+- [x] Patient insurance management (add, edit, delete)
+- [x] Provider team assignment and management
 - [x] Patient status tracking (active, inactive, deceased)
 
 ## Phase 4: Clinical Chart - Core Data
