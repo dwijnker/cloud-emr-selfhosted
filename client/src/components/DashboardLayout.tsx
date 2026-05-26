@@ -21,16 +21,29 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, FileText, Heart, Calendar, Pill, Clipboard, AlertCircle, ClipboardList } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: Users, label: "Patients", path: "/patients" },
+  { icon: Calendar, label: "Appointments", path: "/appointments" },
 ];
+
+const contextMenuItems = (patientId?: string) => {
+  if (!patientId) return [];
+  return [
+    { icon: FileText, label: "Clinical Chart", path: `/patients/${patientId}/chart` },
+    { icon: Heart, label: "Vitals", path: `/patients/${patientId}/vitals` },
+    { icon: Clipboard, label: "Visit Notes", path: `/patients/${patientId}/visits` },
+    { icon: Pill, label: "Orders", path: `/patients/${patientId}/orders` },
+    { icon: ClipboardList, label: "Prescriptions", path: `/patients/${patientId}/prescriptions` },
+    { icon: AlertCircle, label: "Referrals", path: `/patients/${patientId}/referrals` },
+  ];
+};
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -114,6 +127,10 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  
+  const patientIdMatch = location.match(/\/patients\/(\d+)/);
+  const currentPatientId = patientIdMatch ? patientIdMatch[1] : undefined;
+  const contextItems = contextMenuItems(currentPatientId);
 
   useEffect(() => {
     if (isCollapsed) {
@@ -199,6 +216,36 @@ function DashboardLayoutContent({
                 );
               })}
             </SidebarMenu>
+            
+            {contextItems.length > 0 && (
+              <>
+                <div className="px-2 py-3 mt-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                    Patient
+                  </p>
+                </div>
+                <SidebarMenu className="px-2 py-1">
+                  {contextItems.map(item => {
+                    const isActive = location === item.path;
+                    return (
+                      <SidebarMenuItem key={item.path}>
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          onClick={() => setLocation(item.path)}
+                          tooltip={item.label}
+                          className="h-10 transition-all font-normal"
+                        >
+                          <item.icon
+                            className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                          />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </>
+            )}
           </SidebarContent>
 
           <SidebarFooter className="p-3">
