@@ -604,3 +604,60 @@ export const patientFormSubmissions = mysqlTable("patientFormSubmissions", {
 
 export type PatientFormSubmission = typeof patientFormSubmissions.$inferSelect;
 export type InsertPatientFormSubmission = typeof patientFormSubmissions.$inferInsert;
+
+/**
+ * MEDICAL INTAKE
+ */
+export const medicalIntakes = mysqlTable("medicalIntakes", {
+  id: int("id").autoincrement().primaryKey(),
+  patientId: int("patientId").notNull(),
+  intakeDate: timestamp("intakeDate").defaultNow().notNull(),
+  status: mysqlEnum("status", ["in_progress", "completed", "reviewed"]).default("in_progress"),
+  chiefComplaint: text("chiefComplaint"),
+  presentingProblem: text("presentingProblem"),
+  symptomOnset: varchar("symptomOnset", { length: 255 }),
+  symptomSeverity: mysqlEnum("symptomSeverity", ["mild", "moderate", "severe"]),
+  associatedSymptoms: json("associatedSymptoms"), // Array of symptoms
+  medicalHistory: text("medicalHistory"),
+  surgicalHistory: text("surgicalHistory"),
+  familyHistory: text("familyHistory"),
+  socialHistory: text("socialHistory"),
+  allergies: text("allergies"),
+  currentMedications: json("currentMedications"), // Array of medications
+  reviewedBy: varchar("reviewedBy", { length: 255 }),
+  reviewedAt: timestamp("reviewedAt"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MedicalIntake = typeof medicalIntakes.$inferSelect;
+export type InsertMedicalIntake = typeof medicalIntakes.$inferInsert;
+
+export const intakeChatMessages = mysqlTable("intakeChatMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  medicalIntakeId: int("medicalIntakeId").notNull(),
+  role: mysqlEnum("role", ["user", "assistant"]).notNull(),
+  content: text("content").notNull(),
+  messageType: mysqlEnum("messageType", ["question", "response", "symptom_collected", "history_collected"]).default("response"),
+  extractedData: json("extractedData"), // Structured data extracted from response
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type IntakeChatMessage = typeof intakeChatMessages.$inferSelect;
+export type InsertIntakeChatMessage = typeof intakeChatMessages.$inferInsert;
+
+export const intakeSymptoms = mysqlTable("intakeSymptoms", {
+  id: int("id").autoincrement().primaryKey(),
+  medicalIntakeId: int("medicalIntakeId").notNull(),
+  symptom: varchar("symptom", { length: 255 }).notNull(),
+  severity: mysqlEnum("severity", ["mild", "moderate", "severe"]).default("moderate"),
+  duration: varchar("duration", { length: 255 }),
+  onset: varchar("onset", { length: 255 }),
+  associatedFactors: text("associatedFactors"),
+  relievingFactors: text("relievingFactors"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type IntakeSymptom = typeof intakeSymptoms.$inferSelect;
+export type InsertIntakeSymptom = typeof intakeSymptoms.$inferInsert;

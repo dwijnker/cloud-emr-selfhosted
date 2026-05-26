@@ -18,6 +18,7 @@ import Documents from "./pages/Documents";
 import Referrals from "./pages/Referrals";
 import Prescriptions from "./pages/Prescriptions";
 import CareGaps from "./pages/CareGaps";
+import MedicalIntake from "./pages/MedicalIntake";
 
 function Router() {
   return (
@@ -100,10 +101,17 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      <Route path={"/patients/:id/care-gaps"}>
+      <Route path={"/:id/care-gaps"}>
         {(params) => (
           <DashboardLayout>
             <CareGaps />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/:id/intake"}>
+        {(params) => (
+          <DashboardLayout>
+            <MedicalIntake />
           </DashboardLayout>
         )}
       </Route>

@@ -15,6 +15,13 @@
       "when": 1779772998951,
       "tag": "0001_shocking_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779825539412,
+      "tag": "0002_keen_silverclaw",
+      "breakpoints": true
     }
   ]
 }

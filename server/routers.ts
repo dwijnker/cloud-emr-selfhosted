@@ -46,6 +46,19 @@ import {
   getPatientImmunizations,
 } from "./clinical";
 import {
+  createMedicalIntake,
+  getMedicalIntake,
+  getPatientIntakes,
+  updateMedicalIntake,
+  completeMedicalIntake,
+  addIntakeChatMessage,
+  getIntakeChatMessages,
+  addIntakeSymptom,
+  getIntakeSymptoms,
+  deleteIntakeSymptom,
+} from "./intake";
+import { invokeLLM } from "./_core/llm";
+import {
   createLabOrder,
   getPatientLabOrders,
   deleteLabOrder,
@@ -910,6 +923,157 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         return await updatePatientForm(id, data);
+      }),
+  }),
+  intake: router({
+    create: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          chiefComplaint: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createMedicalIntake(input.patientId, {
+          chiefComplaint: input.chiefComplaint,
+        });
+      }),
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return await getMedicalIntake(input.id);
+      }),
+    getPatientIntakes: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return await getPatientIntakes(input.patientId);
+      }),
+    complete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await completeMedicalIntake(input.id);
+      }),
+    addMessage: protectedProcedure
+      .input(
+        z.object({
+          medicalIntakeId: z.number(),
+          role: z.enum(["user", "assistant"]),
+          content: z.string(),
+          messageType: z.enum(["question", "response", "symptom_collected", "history_collected"]).optional(),
+          extractedData: z.any().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await addIntakeChatMessage(input.medicalIntakeId, {
+          role: input.role,
+          content: input.content,
+          messageType: input.messageType,
+          extractedData: input.extractedData,
+        });
+      }),
+    getMessages: protectedProcedure
+      .input(z.object({ medicalIntakeId: z.number() }))
+      .query(async ({ input }) => {
+        return await getIntakeChatMessages(input.medicalIntakeId);
+      }),
+    addSymptom: protectedProcedure
+      .input(
+        z.object({
+          medicalIntakeId: z.number(),
+          symptom: z.string(),
+          severity: z.enum(["mild", "moderate", "severe"]).optional(),
+          duration: z.string().optional(),
+          onset: z.string().optional(),
+          associatedFactors: z.string().optional(),
+          relievingFactors: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await addIntakeSymptom(input.medicalIntakeId, {
+          symptom: input.symptom,
+          severity: input.severity,
+          duration: input.duration,
+          onset: input.onset,
+          associatedFactors: input.associatedFactors,
+          relievingFactors: input.relievingFactors,
+        });
+      }),
+    getSymptoms: protectedProcedure
+      .input(z.object({ medicalIntakeId: z.number() }))
+      .query(async ({ input }) => {
+        return await getIntakeSymptoms(input.medicalIntakeId);
+      }),
+    deleteSymptom: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteIntakeSymptom(input.id);
+      }),
+    chat: protectedProcedure
+      .input(
+        z.object({
+          medicalIntakeId: z.number(),
+          message: z.string(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const existingMessages = await getIntakeChatMessages(input.medicalIntakeId);
+        const intake = await getMedicalIntake(input.medicalIntakeId);
+
+        const conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = existingMessages.map((msg) => ({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+        }));
+
+        conversationHistory.push({
+          role: "user",
+          content: input.message,
+        });
+
+        await addIntakeChatMessage(input.medicalIntakeId, {
+          role: "user",
+          content: input.message,
+          messageType: "question",
+        });
+
+        const systemPrompt = `You are a medical intake assistant helping to collect patient health information.
+You are conducting a structured medical interview to gather:
+- Chief complaint and presenting problem
+- Symptom details (onset, severity, duration, associated factors)
+- Medical history
+- Surgical history
+- Family history
+- Social history
+- Current medications
+- Allergies
+
+Current intake information:
+- Chief Complaint: ${intake?.chiefComplaint || "Not yet provided"}
+- Status: ${intake?.status}
+
+Ask clarifying questions to gather complete information. Be empathetic and professional.
+When you collect specific information, explicitly state what you've learned.
+Keep responses concise and focused on one topic at a time.`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...conversationHistory,
+          ],
+        });
+
+        const messageContent = response.choices[0]?.message?.content;
+        const assistantMessage = typeof messageContent === 'string' ? messageContent : "I apologize, I couldn't process that. Could you please repeat?";
+
+        await addIntakeChatMessage(input.medicalIntakeId, {
+          role: "assistant",
+          content: assistantMessage,
+          messageType: "response",
+        });
+
+        return {
+          message: assistantMessage,
+          intakeId: input.medicalIntakeId,
+        };
       }),
   }),
 });
