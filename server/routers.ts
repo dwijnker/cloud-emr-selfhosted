@@ -46,6 +46,55 @@ import {
   getPatientImmunizations,
 } from "./clinical";
 import {
+  createLabOrder,
+  getPatientLabOrders,
+  deleteLabOrder,
+  updateLabOrder,
+  createLabOrderTest,
+  getLabOrderTests,
+  createImagingOrder,
+  getPatientImagingOrders,
+  deleteImagingOrder,
+  createCardiacOrder,
+  getPatientCardiacOrders,
+  deleteCardiacOrder,
+} from "./orders";
+import {
+  createClinicalDocument,
+  getPatientDocuments,
+  deleteClinicalDocument,
+  updateClinicalDocument,
+  createInternalNote,
+  getPatientInternalNotes,
+  deleteInternalNote,
+  createPatientLetter,
+  getPatientLetters,
+  deletePatientLetter,
+  createReferral,
+  getPatientReferrals,
+  updateReferral,
+  deleteReferral,
+} from "./documents";
+import {
+  createPrescription,
+  getPatientPrescriptions,
+  deletePrescription,
+  updatePrescription,
+  createPrescriptionFill,
+  getPrescriptionFills,
+  createPrescriptionRefill,
+  getPrescriptionRefills,
+  createCareGapDefinition,
+  getCareGapDefinitions,
+  createPatientForm,
+  getPatientForms,
+  updatePatientForm,
+  deletePatientForm,
+  createFormSubmission,
+  getFormSubmissions,
+  updateFormSubmission,
+} from "./prescriptions";
+import {
   createVital,
   getVitalById,
   updateVital,
@@ -630,6 +679,237 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return await deleteAppointment(input.id);
+      }),
+  }),
+
+  orders: router({
+    createLabOrder: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          orderDate: z.date(),
+          status: z.enum(["pending", "completed", "cancelled"]),
+          provider: z.string().optional(),
+          labVendor: z.string().optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createLabOrder(input);
+      }),
+    getLabOrders: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientLabOrders(input.patientId, input.limit);
+      }),
+    deleteLabOrder: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteLabOrder(input.id);
+      }),
+    createImagingOrder: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          orderDate: z.date(),
+          status: z.enum(["pending", "completed", "cancelled"]),
+          provider: z.string().optional(),
+          imagingCenter: z.string().optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createImagingOrder(input);
+      }),
+    getImagingOrders: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientImagingOrders(input.patientId, input.limit);
+      }),
+    deleteImagingOrder: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteImagingOrder(input.id);
+      }),
+    createCardiacOrder: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          orderDate: z.date(),
+          status: z.enum(["pending", "completed", "cancelled"]),
+          provider: z.string().optional(),
+          cardiacCenter: z.string().optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createCardiacOrder(input);
+      }),
+    getCardiacOrders: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientCardiacOrders(input.patientId, input.limit);
+      }),
+    deleteCardiacOrder: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteCardiacOrder(input.id);
+      }),
+  }),
+
+  documents: router({
+    createDocument: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          documentType: z.string(),
+          title: z.string(),
+          content: z.string(),
+          documentDate: z.date(),
+          provider: z.string().optional(),
+          status: z.enum(["draft", "final", "archived"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createClinicalDocument(input);
+      }),
+    getDocuments: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientDocuments(input.patientId, input.limit);
+      }),
+    deleteDocument: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteClinicalDocument(input.id);
+      }),
+    createInternalNote: protectedProcedure
+      .input(
+        z.object({
+          reportId: z.number(),
+          content: z.string(),
+          author: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createInternalNote(input);
+      }),
+    getInternalNotes: protectedProcedure
+      .input(z.object({ reportId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientInternalNotes(input.reportId, input.limit);
+      }),
+    deleteInternalNote: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteInternalNote(input.id);
+      }),
+  }),
+
+  referrals: router({
+    createReferral: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          specialty: z.string(),
+          referralDate: z.date(),
+          status: z.enum(["pending", "accepted", "completed", "cancelled"]),
+          referringProvider: z.string().optional(),
+          referredTo: z.string(),
+          reason: z.string().optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createReferral(input);
+      }),
+    getReferrals: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientReferrals(input.patientId, input.limit);
+      }),
+    updateReferral: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          status: z.enum(["pending", "accepted", "completed", "cancelled"]).optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return await updateReferral(id, data);
+      }),
+    deleteReferral: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteReferral(input.id);
+      }),
+  }),
+
+  prescriptions: router({
+    createPrescription: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          medicationName: z.string(),
+          dosage: z.string().optional(),
+          prescriptionDate: z.date(),
+          prescriber: z.string().optional(),
+          status: z.enum(["active", "filled", "expired", "cancelled"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createPrescription(input);
+      }),
+    getPrescriptions: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientPrescriptions(input.patientId, input.limit);
+      }),
+    deletePrescription: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deletePrescription(input.id);
+      }),
+  }),
+
+  careGaps: router({
+    getCareGapDefinitions: publicProcedure.query(async () => {
+      return await getCareGapDefinitions();
+    }),
+    createPatientForm: protectedProcedure
+      .input(
+        z.object({
+          patientId: z.number(),
+          formName: z.string(),
+          formType: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createPatientForm(input);
+      }),
+    getPatientForms: protectedProcedure
+      .input(z.object({ patientId: z.number(), limit: z.number().default(50) }))
+      .query(async ({ input }) => {
+        return await getPatientForms(input.patientId, input.limit);
+      }),
+    deletePatientForm: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deletePatientForm(input.id);
+      }),
+    updatePatientForm: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          formName: z.string().optional(),
+          formType: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return await updatePatientForm(id, data);
       }),
   }),
 });
