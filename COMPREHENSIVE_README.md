@@ -18,6 +18,7 @@ Cloud EMR is a production-ready EMR system that provides comprehensive patient m
 ✅ **Referrals** - Specialist referral tracking and management
 ✅ **Prescriptions** - Medication management and prescription tracking
 ✅ **Care Gaps** - Patient forms and quality measure tracking
+✅ **Medical Intake** - AI-powered conversational symptom collection and intake chat
 
 ## 🏗️ Architecture
 
@@ -49,13 +50,12 @@ Database (MySQL 8 / TiDB)
 
 **Database:**
 - MySQL 8 or TiDB
-- 33 tables
+- 36 tables
 - Comprehensive schema
 
 **Testing & Quality:**
 - Vitest
-- 69 passing tests
-- ~87% code coverage
+- 87 passing tests
 
 ## 📋 Project Structure
 
@@ -92,7 +92,7 @@ cloud-emr/
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/cloud-emr.git
+git clone https://github.com/dwijnker/cloud-emr.git
 cd cloud-emr
 ```
 
@@ -107,13 +107,18 @@ pnpm install
 DATABASE_URL=mysql://user:password@localhost/cloud_emr
 JWT_SECRET=your-secret-key
 VITE_APP_ID=your-app-id
-# ... other variables
+OAUTH_SERVER_URL=https://...
+VITE_OAUTH_PORTAL_URL=https://...
+OWNER_OPEN_ID=your-owner-open-id
+BUILT_IN_FORGE_API_URL=https://...
+BUILT_IN_FORGE_API_KEY=your-forge-api-key
+VITE_FRONTEND_FORGE_API_URL=https://...
+VITE_FRONTEND_FORGE_API_KEY=your-frontend-forge-api-key
 ```
 
 4. **Run database migrations:**
 ```bash
-pnpm drizzle-kit generate
-pnpm drizzle-kit migrate
+pnpm db:push
 ```
 
 5. **Start development server:**
@@ -145,12 +150,12 @@ pnpm test
 
 ### Watch Mode
 ```bash
-pnpm test --watch
+pnpm exec vitest
 ```
 
 ### Coverage Report
 ```bash
-pnpm test --coverage
+pnpm exec vitest --coverage
 ```
 
 ### Test Files
@@ -159,8 +164,9 @@ pnpm test --coverage
 - `server/vitals-visits.test.ts` - Vitals & visits (19 tests)
 - `server/appointments.test.ts` - Appointments (20 tests)
 - `server/auth.logout.test.ts` - Authentication (1 test)
+- `server/intake.security.test.ts` - Medical Intake security (18 tests)
 
-**Total: 69 tests passing ✅**
+**Total: 87 tests passing ✅**
 
 ## 🔧 Development
 
@@ -181,58 +187,64 @@ pnpm check
 
 ### Database Migrations
 ```bash
-# Generate migration
-pnpm drizzle-kit generate
-
-# Apply migration
-pnpm drizzle-kit migrate
+pnpm db:push
 ```
 
 ## 📊 Database Schema
 
-### Core Tables (33 total)
+### Core Tables (36 total)
 
 **Patient Management:**
 - `users` - System users
 - `patients` - Patient records
-- `patient_insurance` - Insurance coverage
-- `provider_teams` - Care team assignments
+- `patientInsurance` - Insurance coverage
+- `providerTeams` - Care team assignments
 
 **Clinical Data:**
-- `clinical_problems` - Patient problems/diagnoses
+- `problems` - Patient problems/diagnoses
 - `allergies` - Patient allergies
+- `drugIntolerances` - Drug intolerances
 - `medications` - Current medications
 - `immunizations` - Vaccination records
-- `family_histories` - Family medical history
-- `medical_histories` - Past medical history
+- `familyHistories` - Family medical history
+- `medicalHistories` - Past medical history
 
 **Clinical Documentation:**
-- `visit_notes` - SOAP-style visit notes
+- `visitNotes` - SOAP-style visit notes
 - `vitals` - Vital signs records
-- `clinical_documents` - Medical documents
+- `clinicalDocuments` - Medical documents
+- `nonVisitNotes` - Non-visit clinical notes
 - `reports` - Clinical reports
-- `report_internal_notes` - Report notes
+- `reportInternalNotes` - Report notes
 
 **Healthcare Operations:**
 - `appointments` - Scheduled appointments
-- `lab_orders` - Laboratory orders
-- `imaging_orders` - Imaging orders
-- `cardiac_orders` - Cardiac orders
-- `cardiac_tests` - Cardiac test records
+- `labOrders` - Laboratory orders
+- `labOrderTests` - Lab order test items
+- `imagingOrders` - Imaging orders
+- `cardiacOrders` - Cardiac orders
 
 **Referrals & Prescriptions:**
 - `referrals` - Specialist referrals
-- `patient_letters` - Patient correspondence
+- `patientLetters` - Patient correspondence
 - `prescriptions` - Medication prescriptions
-- `prescription_refills` - Prescription refills
+- `prescriptionFills` - Prescription fills
+- `prescriptionRefills` - Prescription refills
 
 **Quality & Forms:**
-- `care_gap_definitions` - Quality measures
-- `patient_forms` - Patient forms
-- `patient_form_submissions` - Form responses
+- `careGapDefinitions` - Quality measures
+- `careGaps` - Care gap instances
+- `patientForms` - Patient forms
+- `patientFormRequests` - Form requests
+- `patientFormSubmissions` - Form responses
+
+**Medical Intake:**
+- `medicalIntakes` - Intake sessions
+- `intakeChatMessages` - Intake chat history
+- `intakeSymptoms` - Captured symptoms
 
 **Utilities:**
-- `document_tags` - Document categorization
+- `documentTags` - Document categorization
 
 ## 🔐 Security
 
@@ -334,6 +346,12 @@ pnpm drizzle-kit migrate
 - ✅ Form submission tracking
 - ✅ Care gap definitions
 
+### Medical Intake
+- ✅ AI-powered conversational symptom collection
+- ✅ Real-time chat interface
+- ✅ Automated symptom extraction and structured storage
+- ✅ Cross-patient isolation with ownership validation
+
 ## 🚢 Deployment
 
 ### Manus Deployment
@@ -350,13 +368,18 @@ JWT_SECRET=...
 VITE_APP_ID=...
 OAUTH_SERVER_URL=...
 VITE_OAUTH_PORTAL_URL=...
+OWNER_OPEN_ID=...
+BUILT_IN_FORGE_API_URL=...
+BUILT_IN_FORGE_API_KEY=...
+VITE_FRONTEND_FORGE_API_URL=...
+VITE_FRONTEND_FORGE_API_KEY=...
 ```
 
 ## 📈 Performance
 
 - **Frontend Build:** ~2s
 - **Backend Build:** ~5s
-- **Test Suite:** ~500ms (69 tests)
+- **Test Suite:** ~500ms (87 tests)
 - **Database Queries:** <100ms (optimized)
 - **API Response:** <200ms average
 
@@ -394,8 +417,8 @@ const createVital = trpc.vitals.createVital.useMutation();
 await createVital.mutateAsync({
   patientId: 1,
   recordDate: new Date(),
-  bloodPressureSystolic: 120,
-  bloodPressureDiastolic: 80,
+  systolicBP: 120,
+  diastolicBP: 80,
   heartRate: 72,
   temperature: 98.6,
   weight: 180,
@@ -410,8 +433,9 @@ await createNote.mutateAsync({
   patientId: 1,
   visitDate: new Date(),
   provider: "Dr. Smith",
-  subjective: "Patient reports fever",
-  objective: "Temp 101.2F",
+  chiefComplaint: "Patient reports fever",
+  historyOfPresentIllness: "Onset 2 days ago",
+  physicalExam: "Temp 101.2F",
   assessment: "Acute bronchitis",
   plan: "Prescribe antibiotics",
   status: "completed",
@@ -422,7 +446,12 @@ await createNote.mutateAsync({
 
 ### Build Issues
 ```bash
+# macOS / Linux
 rm -rf node_modules pnpm-lock.yaml
+
+# Windows (PowerShell)
+Remove-Item -Recurse -Force node_modules; Remove-Item pnpm-lock.yaml
+
 pnpm install
 pnpm build
 ```
@@ -435,8 +464,7 @@ pnpm build
 
 ### Tests Failing
 ```bash
-pnpm test --watch    # Debug mode
-pnpm test --ui       # UI mode
+pnpm exec vitest          # Watch mode for debugging
 ```
 
 ## 📞 Support
@@ -464,7 +492,7 @@ MIT License - See LICENSE file for details
 - [User Guide](./USER_GUIDE.md)
 - [Developer Guide](./DEVELOPER_GUIDE.md)
 - [Testing Guide](./TESTING_GUIDE.md)
-- [GitHub Repository](https://github.com/yourusername/cloud-emr)
+- [GitHub Repository](https://github.com/dwijnker/cloud-emr)
 
 ---
 
