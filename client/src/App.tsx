@@ -38,13 +38,7 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      <Route path={"/patients/:id"}>
-        {(params) => (
-          <DashboardLayout>
-            <PatientDetail patientId={parseInt(params.id)} />
-          </DashboardLayout>
-        )}
-      </Route>
+      {/* Specific patient sub-routes MUST come before generic /patients/:id */}
       <Route path={"/patients/:id/chart"}>
         {(params) => (
           <DashboardLayout>
@@ -70,13 +64,6 @@ function Router() {
         {(params) => (
           <DashboardLayout>
             <Orders />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path={"/appointments"}>
-        {() => (
-          <DashboardLayout>
-            <Appointments />
           </DashboardLayout>
         )}
       </Route>
@@ -112,6 +99,21 @@ function Router() {
         {(params) => (
           <DashboardLayout>
             <MedicalIntake />
+          </DashboardLayout>
+        )}
+      </Route>
+      {/* Generic patient detail route MUST come after all specific sub-routes */}
+      <Route path={"/patients/:id"}>
+        {(params) => (
+          <DashboardLayout>
+            <PatientDetail patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/appointments"}>
+        {() => (
+          <DashboardLayout>
+            <Appointments />
           </DashboardLayout>
         )}
       </Route>
