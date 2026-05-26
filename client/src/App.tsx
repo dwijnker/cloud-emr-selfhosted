@@ -19,10 +19,12 @@ import Referrals from "./pages/Referrals";
 import Prescriptions from "./pages/Prescriptions";
 import CareGaps from "./pages/CareGaps";
 import MedicalIntake from "./pages/MedicalIntake";
+import Login from "./pages/Login";
 
 function Router() {
   return (
     <Switch>
+      <Route path={"/login"} component={Login} />
       <Route path={"/"} component={Home} />
       <Route path={"/patients"}>
         {() => (
