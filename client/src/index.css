@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
@@ -119,6 +120,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -131,9 +134,94 @@
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
+
+  /* Premium typography */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  h1 { @apply text-4xl font-bold; }
+  h2 { @apply text-3xl font-bold; }
+  h3 { @apply text-2xl font-semibold; }
+  h4 { @apply text-xl font-semibold; }
+  h5 { @apply text-lg font-semibold; }
+  h6 { @apply text-base font-semibold; }
+
+  p { @apply text-base leading-relaxed; }
+  small { @apply text-sm; }
 }
 
 @layer components {
+  /* Premium card styles */
+  .card-base {
+    @apply rounded-lg border border-border bg-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md;
+  }
+
+  .card-elevated {
+    @apply rounded-lg bg-card p-6 shadow-md transition-shadow duration-200 hover:shadow-lg;
+  }
+
+  /* Premium button styles */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-200 hover:shadow-md hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-md bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground shadow-sm transition-all duration-200 hover:shadow-md hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-all duration-200 hover:bg-muted active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Input styles */
+  .input-base {
+    @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Table styles */
+  .table-base {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .table-base thead {
+    @apply border-b border-border bg-muted;
+  }
+
+  .table-base th {
+    @apply px-4 py-3 text-left font-semibold text-muted-foreground;
+  }
+
+  .table-base td {
+    @apply px-4 py-3 border-b border-border;
+  }
+
+  .table-base tbody tr {
+    @apply transition-colors duration-150 hover:bg-muted/50;
+  }
+
+  /* Badge styles */
+  .badge-success {
+    @apply inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200;
+  }
+
+  .badge-info {
+    @apply inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200;
+  }
+
+  /* Section divider */
+  .section-divider {
+    @apply my-8 border-t border-border;
+  }
+
   /**
    * Custom container utility that centers content and adds responsive padding.
    *
@@ -173,5 +261,44 @@
       padding-right: 2rem;
       max-width: 1280px; /* Standard content width */
     }
+  }
+}
+
+@layer utilities {
+  /* Text utilities */
+  .text-muted {
+    @apply text-muted-foreground;
+  }
+
+  .text-subtle {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Spacing utilities */
+  .space-y-section {
+    @apply space-y-8;
+  }
+
+  /* Focus visible for accessibility */
+  .focus-visible:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2;
+  }
+
+  /* Smooth transitions */
+  .transition-smooth {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-thin::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-muted-foreground/30 hover:bg-muted-foreground/50;
   }
 }

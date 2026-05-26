@@ -4,13 +4,109 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import DashboardLayout from "./components/DashboardLayout";
 import Home from "./pages/Home";
+import PatientList from "./pages/PatientList";
+import PatientDetail from "./pages/PatientDetail";
+import PatientCreate from "./pages/PatientCreate";
+import ClinicalChart from "./pages/ClinicalChart";
+import VisitNotes from "./pages/VisitNotes";
+import Vitals from "./pages/Vitals";
+import Orders from "./pages/Orders";
+import Appointments from "./pages/Appointments";
+import Documents from "./pages/Documents";
+import Referrals from "./pages/Referrals";
+import Prescriptions from "./pages/Prescriptions";
+import CareGaps from "./pages/CareGaps";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/patients"}>
+        {() => (
+          <DashboardLayout>
+            <PatientList />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/new"}>
+        {() => (
+          <DashboardLayout>
+            <PatientCreate />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id"}>
+        {(params) => (
+          <DashboardLayout>
+            <PatientDetail patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/chart"}>
+        {(params) => (
+          <DashboardLayout>
+            <ClinicalChart patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/visits"}>
+        {(params) => (
+          <DashboardLayout>
+            <VisitNotes patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/vitals"}>
+        {(params) => (
+          <DashboardLayout>
+            <Vitals patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/orders"}>
+        {(params) => (
+          <DashboardLayout>
+            <Orders patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/appointments"}>
+        {() => (
+          <DashboardLayout>
+            <Appointments />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/documents"}>
+        {(params) => (
+          <DashboardLayout>
+            <Documents patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/referrals"}>
+        {(params) => (
+          <DashboardLayout>
+            <Referrals patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/prescriptions"}>
+        {(params) => (
+          <DashboardLayout>
+            <Prescriptions patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/patients/:id/care-gaps"}>
+        {(params) => (
+          <DashboardLayout>
+            <CareGaps patientId={parseInt(params.id)} />
+          </DashboardLayout>
+        )}
+      </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -18,18 +114,10 @@ function Router() {
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />
