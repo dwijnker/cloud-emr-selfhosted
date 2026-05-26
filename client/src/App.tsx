@@ -54,14 +54,14 @@ function Router() {
       <Route path={"/patients/:id/visits"}>
         {(params) => (
           <DashboardLayout>
-            <VisitNotes patientId={parseInt(params.id)} />
+            <VisitNotes />
           </DashboardLayout>
         )}
       </Route>
       <Route path={"/patients/:id/vitals"}>
         {(params) => (
           <DashboardLayout>
-            <Vitals patientId={parseInt(params.id)} />
+            <Vitals />
           </DashboardLayout>
         )}
       </Route>
@@ -79,10 +79,10 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
-      <Route path={"/patients/:id/documents"}>
+      <Route path={"/patients/:id/appointments"}>
         {(params) => (
           <DashboardLayout>
-            <Documents patientId={parseInt(params.id)} />
+            <Appointments />
           </DashboardLayout>
         )}
       </Route>
