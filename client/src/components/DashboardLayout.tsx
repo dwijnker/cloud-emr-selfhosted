@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, FileText, Heart, Calendar, Pill, Clipboard, AlertCircle, ClipboardList } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, FileText, Heart, Calendar, Pill, Clipboard, AlertCircle, ClipboardList, MessageSquare } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -36,6 +36,7 @@ const menuItems = [
 const contextMenuItems = (patientId?: string) => {
   if (!patientId) return [];
   return [
+    { icon: MessageSquare, label: "Medical Intake", path: `/patients/${patientId}/intake` },
     { icon: FileText, label: "Clinical Chart", path: `/patients/${patientId}/chart` },
     { icon: Heart, label: "Vitals", path: `/patients/${patientId}/vitals` },
     { icon: Clipboard, label: "Visit Notes", path: `/patients/${patientId}/visits` },
