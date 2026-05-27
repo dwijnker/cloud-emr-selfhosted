@@ -17,13 +17,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
-
-COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
-RUN pnpm install --frozen-lockfile --prod
-
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY package.json ./
 COPY drizzle ./drizzle
 
 EXPOSE 3000
