@@ -1086,9 +1086,12 @@ export const appRouter = router({
             status: "draft",
           });
 
-          // Add identified problems to the clinical chart
+          // Add identified problems to the clinical chart (skip duplicates)
+          const existingProblems = await getPatientActiveProblems(input.patientId);
+          const existingProblemNames = new Set(existingProblems.map(p => p.description.toLowerCase()));
           for (const problem of extracted.problems ?? []) {
             if (!problem.description) continue;
+            if (existingProblemNames.has(problem.description.toLowerCase())) continue;
             await createProblem({
               patientId: input.patientId,
               description: problem.description,
@@ -1097,9 +1100,12 @@ export const appRouter = router({
             });
           }
 
-          // Add reported allergies to the clinical chart
+          // Add reported allergies to the clinical chart (skip duplicates)
+          const existingAllergies = await getPatientAllergiesFromClinical(input.patientId);
+          const existingAllergenNames = new Set(existingAllergies.map(a => a.allergen.toLowerCase()));
           for (const allergy of extracted.newAllergies ?? []) {
             if (!allergy.allergen) continue;
+            if (existingAllergenNames.has(allergy.allergen.toLowerCase())) continue;
             await createAllergy({
               patientId: input.patientId,
               allergen: allergy.allergen,
@@ -1108,9 +1114,12 @@ export const appRouter = router({
             });
           }
 
-          // Add reported medications to the clinical chart
+          // Add reported medications to the clinical chart (skip duplicates)
+          const existingMeds = await getPatientActiveMedications(input.patientId);
+          const existingMedNames = new Set(existingMeds.map(m => m.medicationName.toLowerCase()));
           for (const med of extracted.newMedications ?? []) {
             if (!med.name) continue;
+            if (existingMedNames.has(med.name.toLowerCase())) continue;
             await createMedication({
               patientId: input.patientId,
               medicationName: med.name,
