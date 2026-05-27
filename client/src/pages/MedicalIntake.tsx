@@ -23,6 +23,7 @@ export default function MedicalIntake() {
   const [isLoading, setIsLoading] = useState(false);
   const [intakeStatus, setIntakeStatus] = useState<"in_progress" | "completed">("in_progress");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const createIntakeMutation = trpc.intake.create.useMutation();
   const chatMutation = trpc.intake.chat.useMutation();
@@ -67,6 +68,13 @@ export default function MedicalIntake() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Focus input after response arrives
+  useEffect(() => {
+    if (!isLoading) {
+      inputRef.current?.focus();
+    }
+  }, [isLoading]);
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !intakeId || isLoading) return;
@@ -169,6 +177,7 @@ export default function MedicalIntake() {
       <div className="border-t border-gray-200 bg-white px-6 py-4 shadow-lg">
         <div className="flex gap-3">
           <Input
+            ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
