@@ -1119,8 +1119,8 @@ export const appRouter = router({
               status: "active",
             });
           }
-        } catch {
-          // LLM extraction failed; intake is already marked complete, swallow the error
+        } catch (err) {
+          console.error("[intake.complete] LLM extraction/chart write failed:", err);
         }
 
         return { success: true };
