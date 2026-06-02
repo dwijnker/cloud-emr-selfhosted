@@ -938,9 +938,10 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        return await createMedicalIntake(input.patientId, {
+        const result = await createMedicalIntake(input.patientId, {
           chiefComplaint: input.chiefComplaint,
         });
+        return { id: Number(result.insertId) };
       }),
     getById: protectedProcedure
       .input(z.object({ id: z.number(), patientId: z.number() }))

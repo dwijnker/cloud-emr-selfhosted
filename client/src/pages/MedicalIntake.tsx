@@ -37,8 +37,7 @@ export default function MedicalIntake() {
           patientId,
           chiefComplaint: "Patient initiated medical intake",
         });
-        // The result is the insert result, get the ID from it
-        const newIntakeId = (result as any)[0]?.id || 1;
+        const newIntakeId = result.id;
         setIntakeId(newIntakeId);
 
         // Load initial greeting from assistant
