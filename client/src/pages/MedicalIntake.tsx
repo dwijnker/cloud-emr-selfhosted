@@ -36,29 +36,29 @@ export default function MedicalIntake() {
     initializedRef.current = true;
 
     const initializeIntake = async () => {
+      let newIntakeId: number | undefined;
       try {
         const result = await createIntakeMutation.mutateAsync({
           patientId,
           chiefComplaint: "Patient initiated medical intake",
         });
-        const newIntakeId = result.id;
+        newIntakeId = result.id;
         if (!newIntakeId) throw new Error("Intake creation returned no ID");
         setIntakeId(newIntakeId);
+      } catch (error) {
+        toast.error(`Failed to start intake: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
 
+      try {
         const greeting = await chatMutation.mutateAsync({
           medicalIntakeId: newIntakeId,
           patientId,
           message: "Hello, I'm ready to help. What brings you in today?",
         });
-
-        setMessages([
-          {
-            role: "assistant",
-            content: greeting.message || "Hello, I'm here to help collect your medical information. What brings you in today?",
-          },
-        ]);
-      } catch (error) {
-        toast.error("Failed to initialize intake session");
+        setMessages([{ role: "assistant", content: greeting.message }]);
+      } catch {
+        setMessages([{ role: "assistant", content: "Hello, I'm here to help collect your medical information. What brings you in today?" }]);
       }
     };
 
