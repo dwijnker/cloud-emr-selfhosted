@@ -1257,6 +1257,11 @@ export const appRouter = router({
 
         const COMPLETE_SENTINEL = "[INTAKE_COMPLETE]";
 
+        const existingProblemsForPrompt = await getPatientActiveProblems(input.patientId);
+        const existingProblemsSection = existingProblemsForPrompt.length > 0
+          ? `\nExisting problems on this patient's chart:\n${existingProblemsForPrompt.map(p => `- ${p.description}${p.icdCode ? ` (${p.icdCode})` : ""}`).join("\n")}\n\nAt the very start of the intake, before asking anything else, ask the patient whether today's visit is related to one of these existing problems or is a brand new complaint. Use their answer to guide the rest of the interview.`
+          : "";
+
         const systemPrompt = `You are a medical intake assistant helping to collect patient health information.
 You are conducting a structured medical interview to gather:
 - Chief complaint and presenting problem
@@ -1267,7 +1272,7 @@ You are conducting a structured medical interview to gather:
 - Social history
 - Current medications
 - Allergies
-
+${existingProblemsSection}
 Current intake information:
 - Chief Complaint: ${intake?.chiefComplaint || "Not yet provided"}
 - Status: ${intake?.status}
