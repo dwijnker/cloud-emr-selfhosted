@@ -24,13 +24,17 @@ export default function MedicalIntake() {
   const [intakeStatus, setIntakeStatus] = useState<"in_progress" | "completed">("in_progress");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const initializedRef = useRef(false);
 
   const createIntakeMutation = trpc.intake.create.useMutation();
   const chatMutation = trpc.intake.chat.useMutation();
   const completeIntakeMutation = trpc.intake.complete.useMutation();
 
-  // Initialize intake session
+  // Initialize intake session exactly once per mount
   useEffect(() => {
+    if (!patientId || initializedRef.current) return;
+    initializedRef.current = true;
+
     const initializeIntake = async () => {
       try {
         const result = await createIntakeMutation.mutateAsync({
@@ -38,9 +42,9 @@ export default function MedicalIntake() {
           chiefComplaint: "Patient initiated medical intake",
         });
         const newIntakeId = result.id;
+        if (!newIntakeId) throw new Error("Intake creation returned no ID");
         setIntakeId(newIntakeId);
 
-        // Load initial greeting from assistant
         const greeting = await chatMutation.mutateAsync({
           medicalIntakeId: newIntakeId,
           patientId,
@@ -58,10 +62,8 @@ export default function MedicalIntake() {
       }
     };
 
-    if (patientId && !intakeId) {
-      initializeIntake();
-    }
-  }, [patientId, intakeId, createIntakeMutation, chatMutation]);
+    initializeIntake();
+  }, [patientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll to bottom
   useEffect(() => {
