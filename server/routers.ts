@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { lookupIcdCode } from "./icd";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
@@ -1093,10 +1094,11 @@ export const appRouter = router({
           for (const problem of extracted.problems ?? []) {
             if (!problem.description) continue;
             if (existingProblemNames.has(problem.description.toLowerCase())) continue;
+            const icdCode = await lookupIcdCode(problem.description);
             await createProblem({
               patientId: input.patientId,
               description: problem.description,
-              icdCode: problem.icdCode || "Z99.9",
+              icdCode,
               status: "active",
             });
           }
@@ -1374,7 +1376,8 @@ When you have gathered sufficient information across all areas above, end your f
               const existingProblemNames = new Set(existingProblems.map(p => p.description.toLowerCase()));
               for (const problem of extracted.problems ?? []) {
                 if (!problem.description || existingProblemNames.has(problem.description.toLowerCase())) continue;
-                await createProblem({ patientId: input.patientId, description: problem.description, icdCode: problem.icdCode || "Z99.9", status: "active" });
+                const icdCode = await lookupIcdCode(problem.description);
+                await createProblem({ patientId: input.patientId, description: problem.description, icdCode, status: "active" });
               }
               const existingAllergies = await getPatientAllergiesFromClinical(input.patientId);
               const existingAllergenNames = new Set(existingAllergies.map(a => a.allergen.toLowerCase()));
