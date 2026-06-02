@@ -263,3 +263,62 @@ Current intake information:
     });
   });
 });
+
+// =============================================================================
+// Intake auto-completion sentinel logic
+// =============================================================================
+
+const COMPLETE_SENTINEL = "[INTAKE_COMPLETE]";
+
+function parseChatResponse(raw: string): { message: string; intakeComplete: boolean } {
+  const intakeComplete = raw.includes(COMPLETE_SENTINEL);
+  const message = raw.replace(COMPLETE_SENTINEL, "").trim();
+  return { message, intakeComplete };
+}
+
+describe("Medical Intake - Auto-completion sentinel", () => {
+  it("should detect the sentinel and set intakeComplete to true", () => {
+    const raw = `Thank you for sharing all that information. I now have everything I need. ${COMPLETE_SENTINEL}`;
+    const { intakeComplete } = parseChatResponse(raw);
+    expect(intakeComplete).toBe(true);
+  });
+
+  it("should not set intakeComplete when sentinel is absent", () => {
+    const raw = "Could you tell me more about your symptoms?";
+    const { intakeComplete } = parseChatResponse(raw);
+    expect(intakeComplete).toBe(false);
+  });
+
+  it("should strip the sentinel from the message shown to the user", () => {
+    const raw = `All done, thank you. ${COMPLETE_SENTINEL}`;
+    const { message } = parseChatResponse(raw);
+    expect(message).not.toContain(COMPLETE_SENTINEL);
+    expect(message).toBe("All done, thank you.");
+  });
+
+  it("should return the full message unchanged when no sentinel is present", () => {
+    const raw = "What medications are you currently taking?";
+    const { message } = parseChatResponse(raw);
+    expect(message).toBe(raw);
+  });
+
+  it("should handle sentinel appearing mid-message", () => {
+    const raw = `We're done. ${COMPLETE_SENTINEL} Have a good day.`;
+    const { message, intakeComplete } = parseChatResponse(raw);
+    expect(intakeComplete).toBe(true);
+    expect(message).not.toContain(COMPLETE_SENTINEL);
+  });
+
+  it("should handle a response that is only the sentinel", () => {
+    const raw = COMPLETE_SENTINEL;
+    const { message, intakeComplete } = parseChatResponse(raw);
+    expect(intakeComplete).toBe(true);
+    expect(message).toBe("");
+  });
+
+  it("should not trigger on a partial sentinel match", () => {
+    const raw = "Please say [INTAKE] when you are ready.";
+    const { intakeComplete } = parseChatResponse(raw);
+    expect(intakeComplete).toBe(false);
+  });
+});
