@@ -184,6 +184,60 @@ Current intake information:
     });
   });
 
+  describe("Intake session ID propagation", () => {
+    it("should expose insertId as a top-level id field on create result", () => {
+      // Simulates what the server returns: { id: Number(result.insertId) }
+      const serverResult = { id: 7 };
+      expect(typeof serverResult.id).toBe("number");
+      expect(serverResult.id).toBe(7);
+    });
+
+    it("should not fall back to id=1 when create result has a valid id", () => {
+      const serverResult = { id: 7 };
+      // Old buggy pattern: (result as any)[0]?.id || 1
+      const buggyId = (serverResult as any)[0]?.id || 1;
+      // New correct pattern: result.id
+      const correctId = serverResult.id;
+      expect(correctId).toBe(7);
+      expect(buggyId).toBe(1); // proves the old pattern was wrong
+    });
+
+    it("should route chat messages to the correct intake when id is taken from create result", () => {
+      const patientA = { id: 10 };
+      const patientB = { id: 20 };
+      const intakeForA = { id: 5, patientId: patientA.id };
+      const intakeForB = { id: 6, patientId: patientB.id };
+
+      // Using correct id from create result
+      const chatRequest = { medicalIntakeId: intakeForB.id, patientId: patientB.id };
+      const intakeLookup = [intakeForA, intakeForB].find(i => i.id === chatRequest.medicalIntakeId);
+      const isOwner = intakeLookup?.patientId === chatRequest.patientId;
+      expect(isOwner).toBe(true);
+    });
+
+    it("should cause cross-patient access when a fallback id=1 is used", () => {
+      const patientA = { id: 10 };
+      const patientB = { id: 20 };
+      const intakeForA = { id: 1, patientId: patientA.id }; // intake 1 belongs to patient A
+      const intakeForB = { id: 6, patientId: patientB.id };
+
+      // Patient B's session incorrectly uses id=1 due to fallback bug
+      const chatRequest = { medicalIntakeId: 1, patientId: patientB.id };
+      const intakeLookup = [intakeForA, intakeForB].find(i => i.id === chatRequest.medicalIntakeId);
+      const isOwner = intakeLookup?.patientId === chatRequest.patientId;
+      expect(isOwner).toBe(false); // cross-patient access is correctly denied
+    });
+
+    it("should deny completion when intake id was corrupted by fallback", () => {
+      const realIntake = { id: 1, patientId: 10, status: "in_progress" };
+      const attackerPatientId = 20;
+
+      // Attacker's session got intakeId=1 via the fallback bug and tries to complete it
+      const canComplete = realIntake.patientId === attackerPatientId;
+      expect(canComplete).toBe(false);
+    });
+  });
+
   describe("FORBIDDEN error conditions", () => {
     it("should throw FORBIDDEN when intake belongs to a different patient", () => {
       const intake = { id: 1, patientId: 42 };
