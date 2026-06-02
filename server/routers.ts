@@ -1255,6 +1255,8 @@ export const appRouter = router({
           messageType: "question",
         });
 
+        const COMPLETE_SENTINEL = "[INTAKE_COMPLETE]";
+
         const systemPrompt = `You are a medical intake assistant helping to collect patient health information.
 You are conducting a structured medical interview to gather:
 - Chief complaint and presenting problem
@@ -1272,7 +1274,8 @@ Current intake information:
 
 Ask clarifying questions to gather complete information. Be empathetic and professional.
 When you collect specific information, explicitly state what you've learned.
-Keep responses concise and focused on one topic at a time.`;
+Keep responses concise and focused on one topic at a time.
+When you have gathered sufficient information across all areas above, end your final message with the exact token: ${COMPLETE_SENTINEL}`;
 
         const response = await invokeLLM({
           messages: [
@@ -1282,7 +1285,10 @@ Keep responses concise and focused on one topic at a time.`;
         });
 
         const messageContent = response.choices[0]?.message?.content;
-        const assistantMessage = typeof messageContent === 'string' ? messageContent : "I apologize, I couldn't process that. Could you please repeat?";
+        const rawMessage = typeof messageContent === 'string' ? messageContent : "I apologize, I couldn't process that. Could you please repeat?";
+
+        const intakeComplete = rawMessage.includes(COMPLETE_SENTINEL);
+        const assistantMessage = rawMessage.replace(COMPLETE_SENTINEL, "").trim();
 
         await addIntakeChatMessage(input.medicalIntakeId, {
           role: "assistant",
@@ -1290,9 +1296,103 @@ Keep responses concise and focused on one topic at a time.`;
           messageType: "response",
         });
 
+        if (intakeComplete) {
+          await completeMedicalIntake(input.medicalIntakeId);
+          const chatMessages = await getIntakeChatMessages(input.medicalIntakeId);
+          const transcript = chatMessages
+            .map(m => `${m.role === "user" ? "Patient" : "Provider"}: ${m.content}`)
+            .join("\n");
+          try {
+            const llmResult = await invokeLLM({
+              messages: [
+                { role: "system", content: "You are a clinical medical scribe. Extract structured medical information from the patient intake conversation. Only include information explicitly stated by the patient. Use empty strings and empty arrays for fields not mentioned." },
+                { role: "user", content: `Extract medical data from this intake conversation:\n\n${transcript}` },
+              ],
+              outputSchema: {
+                name: "intake_extraction",
+                schema: {
+                  type: "object",
+                  properties: {
+                    chiefComplaint: { type: "string" },
+                    presentingProblem: { type: "string" },
+                    symptomOnset: { type: "string" },
+                    symptomSeverity: { type: "string", enum: ["mild", "moderate", "severe", ""] },
+                    associatedSymptoms: { type: "array", items: { type: "string" } },
+                    medicalHistory: { type: "string" },
+                    surgicalHistory: { type: "string" },
+                    familyHistory: { type: "string" },
+                    socialHistory: { type: "string" },
+                    allergiesSummary: { type: "string" },
+                    medicationsSummary: { type: "string" },
+                    assessment: { type: "string" },
+                    plan: { type: "string" },
+                    problems: { type: "array", items: { type: "object", properties: { description: { type: "string" }, icdCode: { type: "string" } }, required: ["description"] } },
+                    newAllergies: { type: "array", items: { type: "object", properties: { allergen: { type: "string" }, severity: { type: "string", enum: ["mild", "moderate", "severe", ""] }, reaction: { type: "string" } }, required: ["allergen"] } },
+                    newMedications: { type: "array", items: { type: "object", properties: { name: { type: "string" }, dosage: { type: "string" }, frequency: { type: "string" } }, required: ["name"] } },
+                  },
+                  required: ["chiefComplaint", "problems", "newAllergies", "newMedications"],
+                  additionalProperties: false,
+                },
+              },
+            });
+            const raw = llmResult.choices[0]?.message?.content;
+            if (raw && typeof raw === "string") {
+              const extracted = JSON.parse(raw);
+              await updateMedicalIntake(input.medicalIntakeId, {
+                chiefComplaint: extracted.chiefComplaint || undefined,
+                presentingProblem: extracted.presentingProblem || undefined,
+                symptomOnset: extracted.symptomOnset || undefined,
+                symptomSeverity: (extracted.symptomSeverity as "mild" | "moderate" | "severe") || undefined,
+                associatedSymptoms: extracted.associatedSymptoms?.length ? extracted.associatedSymptoms : undefined,
+                medicalHistory: extracted.medicalHistory || undefined,
+                surgicalHistory: extracted.surgicalHistory || undefined,
+                familyHistory: extracted.familyHistory || undefined,
+                socialHistory: extracted.socialHistory || undefined,
+                allergies: extracted.allergiesSummary || undefined,
+                currentMedications: extracted.newMedications?.length ? extracted.newMedications : undefined,
+              });
+              await createVisitNote({
+                patientId: input.patientId,
+                visitDate: new Date(),
+                visitType: "Medical Intake",
+                chief_complaint: extracted.chiefComplaint || undefined,
+                history_of_present_illness: extracted.presentingProblem || undefined,
+                past_medical_history: extracted.medicalHistory || undefined,
+                past_surgical_history: extracted.surgicalHistory || undefined,
+                medications_review: extracted.medicationsSummary || undefined,
+                allergies_review: extracted.allergiesSummary || undefined,
+                assessment: extracted.assessment || undefined,
+                plan: extracted.plan || undefined,
+                status: "draft",
+              });
+              const existingProblems = await getPatientActiveProblems(input.patientId);
+              const existingProblemNames = new Set(existingProblems.map(p => p.description.toLowerCase()));
+              for (const problem of extracted.problems ?? []) {
+                if (!problem.description || existingProblemNames.has(problem.description.toLowerCase())) continue;
+                await createProblem({ patientId: input.patientId, description: problem.description, icdCode: problem.icdCode || "Z99.9", status: "active" });
+              }
+              const existingAllergies = await getPatientAllergiesFromClinical(input.patientId);
+              const existingAllergenNames = new Set(existingAllergies.map(a => a.allergen.toLowerCase()));
+              for (const allergy of extracted.newAllergies ?? []) {
+                if (!allergy.allergen || existingAllergenNames.has(allergy.allergen.toLowerCase())) continue;
+                await createAllergy({ patientId: input.patientId, allergen: allergy.allergen, severity: (allergy.severity as "mild" | "moderate" | "severe") || undefined, reaction: allergy.reaction || undefined });
+              }
+              const existingMeds = await getPatientActiveMedications(input.patientId);
+              const existingMedNames = new Set(existingMeds.map(m => m.medicationName.toLowerCase()));
+              for (const med of extracted.newMedications ?? []) {
+                if (!med.name || existingMedNames.has(med.name.toLowerCase())) continue;
+                await createMedication({ patientId: input.patientId, medicationName: med.name, dosage: med.dosage || undefined, frequency: med.frequency || undefined, status: "active" });
+              }
+            }
+          } catch (err) {
+            console.error("[intake.chat] auto-completion extraction failed:", err);
+          }
+        }
+
         return {
           message: assistantMessage,
           intakeId: input.medicalIntakeId,
+          intakeComplete,
         };
       }),
   }),

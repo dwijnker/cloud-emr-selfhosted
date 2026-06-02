@@ -93,6 +93,10 @@ export default function MedicalIntake() {
       });
 
       setMessages((prev) => [...prev, { role: "assistant", content: response.message }]);
+      if (response.intakeComplete) {
+        setIntakeStatus("completed");
+        toast.success("Medical intake completed and chart updated");
+      }
     } catch (error) {
       toast.error("Failed to send message");
     } finally {
