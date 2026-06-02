@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertCircle, Plus, Trash2, Edit2, CheckCircle, AlertTriangle, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 export default function ClinicalChart() {
@@ -20,6 +20,39 @@ export default function ClinicalChart() {
 
   const [activeTab, setActiveTab] = useState("problems");
   const [showAddDialog, setShowAddDialog] = useState(false);
+
+  // Problem form state
+  const [problemDescription, setProblemDescription] = useState("");
+  const [problemIcdCode, setProblemIcdCode] = useState("");
+  const [icdResults, setIcdResults] = useState<Array<{ code: string; name: string }>>([]);
+  const [icdSearching, setIcdSearching] = useState(false);
+  const [showIcdDropdown, setShowIcdDropdown] = useState(false);
+  const icdDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!problemDescription.trim() || problemIcdCode) {
+      setIcdResults([]);
+      setShowIcdDropdown(false);
+      return;
+    }
+    if (icdDebounceRef.current) clearTimeout(icdDebounceRef.current);
+    icdDebounceRef.current = setTimeout(async () => {
+      setIcdSearching(true);
+      try {
+        const res = await fetch(
+          `https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search?sf=code,name&terms=${encodeURIComponent(problemDescription)}&maxList=8`
+        );
+        const data = await res.json();
+        const rows: Array<[string, string]> = data[3] ?? [];
+        setIcdResults(rows.map(([code, name]) => ({ code, name })));
+        setShowIcdDropdown(rows.length > 0);
+      } catch {
+        setIcdResults([]);
+      } finally {
+        setIcdSearching(false);
+      }
+    }, 350);
+  }, [problemDescription, problemIcdCode]);
 
   // Queries
   const { data: problems, isLoading: problemsLoading, refetch: refetchProblems } = trpc.clinical.getProblems.useQuery(
@@ -44,6 +77,8 @@ export default function ClinicalChart() {
     onSuccess: () => {
       toast.success("Problem added successfully");
       setShowAddDialog(false);
+      setProblemDescription("");
+      setProblemIcdCode("");
       refetchProblems();
     },
     onError: (error) => {
@@ -177,7 +212,7 @@ export default function ClinicalChart() {
           <TabsContent value="problems" className="space-y-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-semibold text-gray-900">Active Problems</h2>
-              <Dialog open={showAddDialog && activeTab === "problems"} onOpenChange={setShowAddDialog}>
+              <Dialog open={showAddDialog && activeTab === "problems"} onOpenChange={(open) => { setShowAddDialog(open); if (!open) { setProblemDescription(""); setProblemIcdCode(""); setShowIcdDropdown(false); } }}>
                 <DialogTrigger asChild>
                   <Button className="gap-2">
                     <Plus className="w-4 h-4" />
@@ -191,25 +226,56 @@ export default function ClinicalChart() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      const formData = new FormData(e.currentTarget);
                       createProblemMutation.mutate({
                         patientId,
-                        icdCode: formData.get("icdCode") as string,
-                        description: formData.get("description") as string,
+                        icdCode: problemIcdCode,
+                        description: problemDescription,
                         status: "active",
                       });
                     }}
                     className="space-y-4"
                   >
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">ICD Code</label>
-                      <Input name="icdCode" placeholder="e.g., I10" required />
+                    <div className="relative">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Description {icdSearching && <span className="text-gray-400 font-normal">(searching…)</span>}
+                      </label>
+                      <Input
+                        value={problemDescription}
+                        onChange={(e) => { setProblemDescription(e.target.value); setProblemIcdCode(""); }}
+                        placeholder="Type to search ICD-10 codes"
+                        required
+                        autoComplete="off"
+                      />
+                      {showIcdDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
+                          {icdResults.map((r) => (
+                            <button
+                              key={r.code}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex gap-2"
+                              onClick={() => {
+                                setProblemDescription(r.name);
+                                setProblemIcdCode(r.code);
+                                setShowIcdDropdown(false);
+                              }}
+                            >
+                              <span className="font-mono text-blue-700 shrink-0">{r.code}</span>
+                              <span className="text-gray-800">{r.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                      <Input name="description" placeholder="Problem description" required />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ICD-10 Code</label>
+                      <Input
+                        value={problemIcdCode}
+                        onChange={(e) => setProblemIcdCode(e.target.value)}
+                        placeholder="e.g., I10"
+                        required
+                      />
                     </div>
-                    <Button type="submit" className="w-full">
+                    <Button type="submit" className="w-full" disabled={!problemDescription || !problemIcdCode}>
                       Add Problem
                     </Button>
                   </form>
