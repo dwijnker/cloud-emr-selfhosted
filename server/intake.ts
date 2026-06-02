@@ -20,13 +20,13 @@ export async function createMedicalIntake(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(medicalIntakes).values({
+  const [row] = await db.insert(medicalIntakes).values({
     patientId,
     status: "in_progress",
     ...data,
-  });
+  }).$returningId();
 
-  return result;
+  return row;
 }
 
 /**
