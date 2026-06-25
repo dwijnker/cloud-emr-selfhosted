@@ -192,7 +192,7 @@ describe("Appointments Management - Business Logic", () => {
 
   describe("Calendar Views", () => {
     it("should generate daily view", () => {
-      const date = new Date("2024-02-15");
+      const date = new Date("2024-02-15T00:00:00");
       const appointments = [
         { date: new Date("2024-02-15T09:00:00"), provider: "Dr. Smith" },
         { date: new Date("2024-02-15T14:00:00"), provider: "Dr. Johnson" },

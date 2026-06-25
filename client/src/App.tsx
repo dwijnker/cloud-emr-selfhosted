@@ -19,6 +19,9 @@ import Referrals from "./pages/Referrals";
 import Prescriptions from "./pages/Prescriptions";
 import CareGaps from "./pages/CareGaps";
 import MedicalIntake from "./pages/MedicalIntake";
+import Staff from "./pages/Staff";
+import StaffDetail from "./pages/StaffDetail";
+import Locations from "./pages/Locations";
 import Login from "./pages/Login";
 
 function Router() {
@@ -116,6 +119,28 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Appointments />
+          </DashboardLayout>
+        )}
+      </Route>
+      {/* Staff sub-routes before the generic /staff/:id */}
+      <Route path={"/staff/:id"}>
+        {() => (
+          <DashboardLayout>
+            <StaffDetail />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/staff"}>
+        {() => (
+          <DashboardLayout>
+            <Staff />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/locations"}>
+        {() => (
+          <DashboardLayout>
+            <Locations />
           </DashboardLayout>
         )}
       </Route>

@@ -131,7 +131,91 @@ import {
   deleteAppointment,
   getPatientUpcomingAppointments,
   getPatientPastAppointments,
+  getStaffAppointmentsByDateRange,
 } from "./appointments";
+import {
+  createStaff,
+  listStaff,
+  getStaffById,
+  updateStaff,
+  deleteStaff,
+  createLocation,
+  listLocations,
+  getLocationById,
+  updateLocation,
+  deleteLocation,
+  createWeeklySchedule,
+  getStaffWeeklySchedules,
+  deleteWeeklySchedule,
+  createScheduleException,
+  getStaffScheduleExceptions,
+  deleteScheduleException,
+  getStaffAvailabilityForDate,
+} from "./staff";
+import { fitsInAvailability, dateToTime, findOverlap } from "./staffAvailability";
+
+/**
+ * Throws a BAD_REQUEST if the staff member is not scheduled to work during the
+ * requested appointment window (date + time of day for the given duration).
+ */
+async function assertStaffAvailable(
+  staffId: number,
+  appointmentDate: Date,
+  durationMinutes: number,
+  locationId?: number | null
+) {
+  const blocks = await getStaffAvailabilityForDate(staffId, appointmentDate);
+  if (blocks.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This staff member is not scheduled to work on that date.",
+    });
+  }
+  const startTime = dateToTime(appointmentDate);
+  const endTime = dateToTime(new Date(appointmentDate.getTime() + durationMinutes * 60000));
+  if (!fitsInAvailability(blocks, startTime, endTime, locationId ?? null)) {
+    const hours = blocks.map((b) => `${b.startTime}–${b.endTime}`).join(", ");
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Outside the staff member's available hours for that day (${hours}).`,
+    });
+  }
+}
+
+/**
+ * Throws a CONFLICT if the requested window collides with another non-cancelled
+ * appointment for the same staff member. `excludeId` skips the row being edited.
+ */
+async function assertNoOverlap(
+  staffId: number,
+  appointmentDate: Date,
+  durationMinutes: number,
+  excludeId?: number
+) {
+  const start = appointmentDate.getTime();
+  const end = start + durationMinutes * 60000;
+  // Widen the fetch window by a day on each side so long appointments that
+  // start outside the target day but overlap into it are still considered.
+  const windowStart = new Date(start - 24 * 60 * 60 * 1000);
+  const windowEnd = new Date(end + 24 * 60 * 60 * 1000);
+
+  const existing = await getStaffAppointmentsByDateRange(staffId, windowStart, windowEnd);
+  const others = existing
+    .filter((a) => a.id !== excludeId)
+    .map((a) => {
+      const otherStart = new Date(a.appointmentDate).getTime();
+      return { start: otherStart, end: otherStart + (a.duration ?? 30) * 60000 };
+    });
+
+  const conflict = findOverlap({ start, end }, others);
+  if (conflict) {
+    const when = new Date(conflict.start).toLocaleString();
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `This staff member already has an appointment that overlaps this time (${when}).`,
+    });
+  }
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -639,6 +723,8 @@ export const appRouter = router({
           patientId: z.number(),
           appointmentDate: z.date(),
           appointmentType: z.string().optional(),
+          staffId: z.number().optional(),
+          locationId: z.number().optional(),
           provider: z.string().optional(),
           location: z.string().optional(),
           duration: z.number().optional(),
@@ -647,6 +733,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        if (input.staffId) {
+          await assertStaffAvailable(
+            input.staffId,
+            input.appointmentDate,
+            input.duration ?? 30,
+            input.locationId
+          );
+          await assertNoOverlap(input.staffId, input.appointmentDate, input.duration ?? 30);
+        }
         return await createAppointment(input);
       }),
 
@@ -674,12 +769,25 @@ export const appRouter = router({
         return await getAppointmentById(input.id);
       }),
 
+    // Non-cancelled appointments for a staff member on a given calendar day,
+    // used client-side to hide already-booked slots.
+    getStaffDaySchedule: protectedProcedure
+      .input(z.object({ staffId: z.number(), date: z.date() }))
+      .query(async ({ input }) => {
+        const d = input.date;
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+        return await getStaffAppointmentsByDateRange(input.staffId, dayStart, dayEnd);
+      }),
+
     updateAppointment: protectedProcedure
       .input(
         z.object({
           id: z.number(),
           appointmentDate: z.date().optional(),
           appointmentType: z.string().optional(),
+          staffId: z.number().optional(),
+          locationId: z.number().optional(),
           provider: z.string().optional(),
           location: z.string().optional(),
           status: z.enum(["scheduled", "completed", "cancelled", "no-show"]).optional(),
@@ -688,6 +796,18 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
+        // Re-validate availability when the staff member, date, or location changes.
+        if (data.staffId !== undefined || data.appointmentDate !== undefined || data.locationId !== undefined) {
+          const existing = await getAppointmentById(id);
+          const staffId = data.staffId ?? existing?.staffId ?? undefined;
+          const appointmentDate = data.appointmentDate ?? existing?.appointmentDate;
+          const locationId = data.locationId ?? existing?.locationId ?? null;
+          const duration = existing?.duration ?? 30;
+          if (staffId && appointmentDate) {
+            await assertStaffAvailable(staffId, appointmentDate, duration, locationId);
+            await assertNoOverlap(staffId, appointmentDate, duration, id);
+          }
+        }
         return await updateAppointment(id, data);
       }),
 
@@ -928,6 +1048,189 @@ export const appRouter = router({
         return await updatePatientForm(id, data);
       }),
   }),
+  /**
+   * STAFF & SCHEDULING
+   */
+  staff: router({
+    list: protectedProcedure
+      .input(z.object({ includeInactive: z.boolean().default(false) }).optional())
+      .query(async ({ input }) => {
+        return await listStaff(input?.includeInactive ?? false);
+      }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const member = await getStaffById(input.id);
+        if (!member) throw new TRPCError({ code: "NOT_FOUND", message: "Staff member not found" });
+        return member;
+      }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          firstName: z.string().min(1),
+          lastName: z.string().min(1),
+          staffType: z.enum(["doctor", "nurse_practitioner", "dietitian"]),
+          specialty: z.string().optional(),
+          status: z.enum(["active", "inactive"]).default("active"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createStaff(input);
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          firstName: z.string().min(1).optional(),
+          lastName: z.string().min(1).optional(),
+          staffType: z.enum(["doctor", "nurse_practitioner", "dietitian"]).optional(),
+          specialty: z.string().optional(),
+          status: z.enum(["active", "inactive"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return await updateStaff(id, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteStaff(input.id);
+      }),
+
+    // WEEKLY SCHEDULES
+    getWeeklySchedules: protectedProcedure
+      .input(z.object({ staffId: z.number() }))
+      .query(async ({ input }) => {
+        return await getStaffWeeklySchedules(input.staffId);
+      }),
+
+    addWeeklySchedule: protectedProcedure
+      .input(
+        z.object({
+          staffId: z.number(),
+          locationId: z.number().optional(),
+          dayOfWeek: z.number().int().min(0).max(6),
+          startTime: z.string().regex(/^\d{2}:\d{2}$/),
+          endTime: z.string().regex(/^\d{2}:\d{2}$/),
+        })
+      )
+      .mutation(async ({ input }) => {
+        if (input.endTime <= input.startTime) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "End time must be after start time" });
+        }
+        return await createWeeklySchedule(input);
+      }),
+
+    deleteWeeklySchedule: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteWeeklySchedule(input.id);
+      }),
+
+    // SCHEDULE EXCEPTIONS
+    getExceptions: protectedProcedure
+      .input(
+        z.object({
+          staffId: z.number(),
+          startDate: z.date().optional(),
+          endDate: z.date().optional(),
+        })
+      )
+      .query(async ({ input }) => {
+        return await getStaffScheduleExceptions(input.staffId, input.startDate, input.endDate);
+      }),
+
+    addException: protectedProcedure
+      .input(
+        z.object({
+          staffId: z.number(),
+          date: z.date(),
+          type: z.enum(["time_off", "custom_hours"]).default("time_off"),
+          locationId: z.number().optional(),
+          startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+          endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+          reason: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        if (input.type === "custom_hours") {
+          if (!input.startTime || !input.endTime) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Custom hours require a start and end time" });
+          }
+          if (input.endTime <= input.startTime) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "End time must be after start time" });
+          }
+        }
+        return await createScheduleException(input);
+      }),
+
+    deleteException: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteScheduleException(input.id);
+      }),
+
+    // Resolved working blocks for a staff member on a specific date.
+    getAvailability: protectedProcedure
+      .input(z.object({ staffId: z.number(), date: z.date() }))
+      .query(async ({ input }) => {
+        return await getStaffAvailabilityForDate(input.staffId, input.date);
+      }),
+  }),
+
+  locations: router({
+    list: protectedProcedure
+      .input(z.object({ includeInactive: z.boolean().default(false) }).optional())
+      .query(async ({ input }) => {
+        return await listLocations(input?.includeInactive ?? false);
+      }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const loc = await getLocationById(input.id);
+        if (!loc) throw new TRPCError({ code: "NOT_FOUND", message: "Location not found" });
+        return loc;
+      }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          address: z.string().optional(),
+          status: z.enum(["active", "inactive"]).default("active"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return await createLocation(input);
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          name: z.string().min(1).optional(),
+          address: z.string().optional(),
+          status: z.enum(["active", "inactive"]).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return await updateLocation(id, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteLocation(input.id);
+      }),
+  }),
+
   intake: router({
     // Helper: verify that an intake belongs to the given patientId.
     // Used internally by procedures that receive an intakeId directly.

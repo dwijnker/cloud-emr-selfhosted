@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { eq, desc, and, gte, lte, ne } from "drizzle-orm";
 import { getDb } from "./db";
 import { appointments, InsertAppointment } from "../drizzle/schema";
 
@@ -66,6 +66,32 @@ export async function getPatientPastAppointments(patientId: number, limit: numbe
     .where(and(eq(appointments.patientId, patientId), lte(appointments.appointmentDate, now)))
     .orderBy(desc(appointments.appointmentDate))
     .limit(limit);
+}
+
+/**
+ * Non-cancelled appointments for a staff member whose start falls within
+ * [startDate, endDate]. Used to detect double-booking; callers should still
+ * compare full intervals (start + duration) in code.
+ */
+export async function getStaffAppointmentsByDateRange(
+  staffId: number,
+  startDate: Date,
+  endDate: Date
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db
+    .select()
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.staffId, staffId),
+        ne(appointments.status, "cancelled"),
+        gte(appointments.appointmentDate, startDate),
+        lte(appointments.appointmentDate, endDate)
+      )
+    )
+    .orderBy(appointments.appointmentDate);
 }
 
 export async function getAppointmentsByDateRange(

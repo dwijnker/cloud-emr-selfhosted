@@ -5,38 +5,83 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ArrowLeft, Calendar, Clock, User, MapPin } from "lucide-react";
-import { useState } from "react";
+import { Plus, Trash2, ArrowLeft, Calendar, User, MapPin, AlertTriangle, Clock } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { generateOpenSlots } from "@shared/scheduling";
+
+function formatTime(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m);
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
 
 export default function Appointments() {
   const [location, navigate] = useLocation();
   const patientId = parseInt(location.split("/")[2]);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
+
+  // Controlled add-appointment form state
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("09:00");
+  const [duration, setDuration] = useState("30");
+  const [staffId, setStaffId] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [appointmentType, setAppointmentType] = useState("");
+  const [status, setStatus] = useState("scheduled");
+  const [notes, setNotes] = useState("");
 
   // Queries
   const { data: appointments, isLoading, refetch } = trpc.appointments.getAppointments.useQuery(
     { patientId, limit: 100 },
     { enabled: !!patientId }
   );
+  const { data: staff } = trpc.staff.list.useQuery({ includeInactive: false });
+  const { data: locations } = trpc.locations.list.useQuery({ includeInactive: false });
 
-  const { data: upcomingAppointments } = trpc.appointments.getUpcomingAppointments.useQuery(
-    { patientId, limit: 10 },
-    { enabled: !!patientId }
+  const staffMap = useMemo(
+    () => new Map((staff ?? []).map((s) => [s.id, `${s.firstName} ${s.lastName}`])),
+    [staff]
+  );
+  const locationMap = useMemo(
+    () => new Map((locations ?? []).map((l) => [l.id, l.name])),
+    [locations]
   );
 
-  // Mutations
+  // Live availability for the chosen staff member + date (stable Date ref).
+  const availabilityDate = useMemo(() => (date ? new Date(`${date}T12:00:00`) : null), [date]);
+  const slotsEnabled = !!staffId && !!availabilityDate;
+  const { data: availability } = trpc.staff.getAvailability.useQuery(
+    { staffId: parseInt(staffId), date: availabilityDate as Date },
+    { enabled: slotsEnabled }
+  );
+  const { data: daySchedule } = trpc.appointments.getStaffDaySchedule.useQuery(
+    { staffId: parseInt(staffId), date: availabilityDate as Date },
+    { enabled: slotsEnabled }
+  );
+
+  // Open slots = availability blocks stepped by the appointment length, minus
+  // anything already booked that day.
+  const openSlots = useMemo(() => {
+    if (!availability) return [];
+    const busy = (daySchedule ?? []).map((a) => {
+      const d = new Date(a.appointmentDate);
+      const start = d.getHours() * 60 + d.getMinutes();
+      return { start, end: start + (a.duration ?? 30) };
+    });
+    return generateOpenSlots(availability, busy, parseInt(duration) || 30, locationId ? parseInt(locationId) : undefined);
+  }, [availability, daySchedule, duration, locationId]);
+
   const createAppointmentMutation = trpc.appointments.createAppointment.useMutation({
     onSuccess: () => {
       toast.success("Appointment created successfully");
       setShowAddDialog(false);
+      resetForm();
       refetch();
     },
-    onError: (error) => {
-      toast.error(`Error: ${error.message}`);
-    },
+    onError: (error) => toast.error(`Error: ${error.message}`),
   });
 
   const updateAppointmentMutation = trpc.appointments.updateAppointment.useMutation({
@@ -44,9 +89,7 @@ export default function Appointments() {
       toast.success("Appointment updated successfully");
       refetch();
     },
-    onError: (error: any) => {
-      toast.error(`Error: ${error.message}`);
-    },
+    onError: (error: any) => toast.error(`Error: ${error.message}`),
   });
 
   const deleteAppointmentMutation = trpc.appointments.deleteAppointment.useMutation({
@@ -54,10 +97,19 @@ export default function Appointments() {
       toast.success("Appointment deleted");
       refetch();
     },
-    onError: (error: any) => {
-      toast.error(`Error: ${error.message}`);
-    },
+    onError: (error: any) => toast.error(`Error: ${error.message}`),
   });
+
+  const resetForm = () => {
+    setDate("");
+    setTime("09:00");
+    setDuration("30");
+    setStaffId("");
+    setLocationId("");
+    setAppointmentType("");
+    setStatus("scheduled");
+    setNotes("");
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -78,40 +130,27 @@ export default function Appointments() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const appointmentData = {
-      patientId,
-      appointmentDate: new Date(formData.get("appointmentDate") as string),
-      provider: (formData.get("provider") as string) || undefined,
-      appointmentType: (formData.get("appointmentType") as string) || undefined,
-      location: (formData.get("location") as string) || undefined,
-      status: (formData.get("status") as any) || "scheduled",
-      notes: (formData.get("notes") as string) || undefined,
-    };
-
-    createAppointmentMutation.mutate(appointmentData as any);
-  };
-
-  const formatTime = (timeStr?: string) => {
-    if (!timeStr) return "TBD";
-    try {
-      const [hours, minutes] = timeStr.split(":").map(Number);
-      const date = new Date();
-      date.setHours(hours, minutes);
-      return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-    } catch {
-      return timeStr;
+    if (!date) {
+      toast.error("Please choose a date");
+      return;
     }
+    createAppointmentMutation.mutate({
+      patientId,
+      appointmentDate: new Date(`${date}T${time}:00`),
+      duration: parseInt(duration) || undefined,
+      staffId: staffId ? parseInt(staffId) : undefined,
+      locationId: locationId ? parseInt(locationId) : undefined,
+      appointmentType: appointmentType || undefined,
+      status: status as any,
+      notes: notes || undefined,
+    });
   };
 
-  const isUpcoming = (date: Date) => {
-    return new Date(date) > new Date();
-  };
+  const isUpcoming = (d: Date) => new Date(d) > new Date();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <Button variant="ghost" onClick={() => navigate("/patients")} className="mb-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Patients
@@ -121,34 +160,6 @@ export default function Appointments() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Appointments</h1>
           <p className="text-gray-600">Manage patient appointments and scheduling</p>
         </div>
-
-        {/* Upcoming Appointments Summary */}
-        {upcomingAppointments && upcomingAppointments.length > 0 && (
-          <Card className="p-6 mb-8 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Upcoming Appointments</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {upcomingAppointments.slice(0, 3).map((apt) => (
-                <div key={apt.id} className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                  <p className="font-semibold text-gray-900">
-                    {new Date(apt.appointmentDate).toLocaleDateString()}
-                  </p>
-
-                  {apt.provider && (
-                    <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                      <User className="w-4 h-4" />
-                      {apt.provider}
-                    </p>
-                  )}
-                  {apt.appointmentType && (
-                    <Badge variant="outline" className="mt-2">
-                      {apt.appointmentType}
-                    </Badge>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
 
         {/* Add Appointment Button */}
         <div className="mb-8">
@@ -164,52 +175,146 @@ export default function Appointments() {
                 <DialogTitle>Schedule New Appointment</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Appointment Date</label>
-                    <Input name="appointmentDate" type="date" required />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
                   </div>
-
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                    {slotsEnabled ? (
+                      <Select value={time} onValueChange={setTime} disabled={openSlots.length === 0}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={openSlots.length ? "Open slot" : "No slots"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {openSlots.map((s) => (
+                            <SelectItem key={s.startTime} value={s.startTime}>
+                              {formatTime(s.startTime)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
+                    <Input
+                      type="number"
+                      min={5}
+                      step={5}
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
-                    <Input name="provider" placeholder="Provider name" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member</label>
+                    <Select value={staffId} onValueChange={setStaffId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select staff" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(staff ?? []).map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {s.firstName} {s.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <Select value={locationId} onValueChange={setLocationId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(locations ?? []).map((l) => (
+                          <SelectItem key={l.id} value={String(l.id)}>
+                            {l.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Availability hint for the chosen staff member + date */}
+                {slotsEnabled && availability && (() => {
+                  const locId = locationId ? parseInt(locationId) : null;
+                  const locationBlocks =
+                    locId == null
+                      ? availability
+                      : availability.filter((b) => b.locationId == null || b.locationId === locId);
+                  if (availability.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        This staff member is not scheduled to work on that date.
+                      </div>
+                    );
+                  }
+                  if (locationBlocks.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Not working at this location on that date.
+                      </div>
+                    );
+                  }
+                  if (openSlots.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Fully booked that day — no open {duration}-minute slots.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                      <Clock className="w-4 h-4 text-green-600" />
+                      Working hours:{" "}
+                      {locationBlocks.map((b) => `${formatTime(b.startTime)}–${formatTime(b.endTime)}`).join(", ")}
+                    </div>
+                  );
+                })()}
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Appointment Type</label>
-                    <Input name="appointmentType" placeholder="e.g., Checkup, Follow-up" />
+                    <Input
+                      value={appointmentType}
+                      onChange={(e) => setAppointmentType(e.target.value)}
+                      placeholder="e.g., Checkup, Follow-up"
+                    />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                  <Input name="location" placeholder="Office location or virtual" />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <Select name="status" defaultValue="scheduled">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="scheduled">Scheduled</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                      <SelectItem value="no-show">No-Show</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <Select value={status} onValueChange={setStatus}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        <SelectItem value="no-show">No-Show</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <Input name="notes" placeholder="Additional notes" />
+                  <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes" />
                 </div>
 
-                <Button type="submit" className="w-full">
+                <Button type="submit" className="w-full" disabled={createAppointmentMutation.isPending}>
                   Schedule Appointment
                 </Button>
               </form>
@@ -225,72 +330,65 @@ export default function Appointments() {
           ) : appointments && appointments.length > 0 ? (
             <div className="grid gap-4">
               {appointments
+                .slice()
                 .sort((a: any, b: any) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
-                .map((apt: any) => (
-                  <Card
-                    key={apt.id}
-                    className={`p-4 hover:shadow-md transition-shadow ${
-                      isUpcoming(apt.appointmentDate) ? "border-l-4 border-green-500" : ""
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Calendar className="w-5 h-5 text-green-600" />
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {new Date(apt.appointmentDate).toLocaleDateString()}
-                          </h3>
-                          <Badge className={getStatusColor(apt.status ?? "scheduled")}>
-                            {apt.status ?? "scheduled"}
-                          </Badge>
-                          {apt.appointmentType && <Badge variant="outline">{apt.appointmentType}</Badge>}
+                .map((apt: any) => {
+                  const providerLabel = apt.staffId ? staffMap.get(apt.staffId) : apt.provider;
+                  const locationLabel = apt.locationId ? locationMap.get(apt.locationId) : apt.location;
+                  return (
+                    <Card
+                      key={apt.id}
+                      className={`p-4 hover:shadow-md transition-shadow ${
+                        isUpcoming(apt.appointmentDate) ? "border-l-4 border-green-500" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Calendar className="w-5 h-5 text-green-600" />
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {new Date(apt.appointmentDate).toLocaleString([], {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })}
+                            </h3>
+                            <Badge className={getStatusColor(apt.status ?? "scheduled")}>
+                              {apt.status ?? "scheduled"}
+                            </Badge>
+                            {apt.appointmentType && <Badge variant="outline">{apt.appointmentType}</Badge>}
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mt-2">
+                            {providerLabel && (
+                              <p className="text-gray-700 flex items-center gap-1">
+                                <User className="w-4 h-4" />
+                                {providerLabel}
+                              </p>
+                            )}
+                            {locationLabel && (
+                              <p className="text-gray-700 flex items-center gap-1">
+                                <MapPin className="w-4 h-4" />
+                                {locationLabel}
+                              </p>
+                            )}
+                          </div>
+
+                          {apt.notes && <p className="text-sm text-gray-600 mt-2">Notes: {apt.notes}</p>}
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mt-2">
-
-                          {apt.provider && (
-                            <p className="text-gray-700 flex items-center gap-1">
-                              <User className="w-4 h-4" />
-                              {apt.provider}
-                            </p>
-                          )}
-                          {apt.location && (
-                            <p className="text-gray-700 flex items-center gap-1">
-                              <MapPin className="w-4 h-4" />
-                              {apt.location}
-                            </p>
-                          )}
-                        </div>
-
-                        {apt.notes && <p className="text-sm text-gray-600 mt-2">Notes: {apt.notes}</p>}
-                      </div>
-
-                      <div className="flex gap-2">
-                        {apt.status === "scheduled" && (
+                        <div className="flex gap-2">
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            onClick={() =>
-                              updateAppointmentMutation.mutate({
-                                id: apt.id,
-                                status: "confirmed",
-                              } as any)
-                            }
+                            onClick={() => deleteAppointmentMutation.mutate({ id: apt.id })}
                           >
-                            Confirm
+                            <Trash2 className="w-4 h-4 text-red-500" />
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteAppointmentMutation.mutate({ id: apt.id })}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
             </div>
           ) : (
             <div className="text-center py-12 text-gray-500">No appointments scheduled</div>
