@@ -152,28 +152,42 @@ import {
   deleteScheduleException,
   getStaffAvailabilityForDate,
 } from "./staff";
-import { fitsInAvailability, dateToTime, findOverlap } from "./staffAvailability";
+import {
+  fitsInAvailability,
+  dateToTime,
+  toIsoDate,
+  minutesToTime,
+  timeToMinutes,
+  findOverlap,
+} from "./staffAvailability";
 
 /**
  * Throws a BAD_REQUEST if the staff member is not scheduled to work during the
- * requested appointment window (date + time of day for the given duration).
+ * requested appointment window. Validation is done against the clinic-local
+ * wall-clock day + time the user picked (`wallDate`/`wallTime`), NOT by reading
+ * the absolute instant in the server's timezone — schedule blocks are stored as
+ * timezone-naive wall-clock strings, so converting through server-local time
+ * would reject valid slots whenever the server runs in a different zone (e.g.
+ * UTC) than the booker.
  */
 async function assertStaffAvailable(
   staffId: number,
-  appointmentDate: Date,
+  wallDate: string, // "YYYY-MM-DD"
+  wallTime: string, // "HH:MM"
   durationMinutes: number,
   locationId?: number | null
 ) {
-  const blocks = await getStaffAvailabilityForDate(staffId, appointmentDate);
+  // Anchor at local noon so getDay()/toIsoDate() resolve to the intended day.
+  const lookupDate = new Date(`${wallDate}T12:00:00`);
+  const blocks = await getStaffAvailabilityForDate(staffId, lookupDate);
   if (blocks.length === 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "This staff member is not scheduled to work on that date.",
     });
   }
-  const startTime = dateToTime(appointmentDate);
-  const endTime = dateToTime(new Date(appointmentDate.getTime() + durationMinutes * 60000));
-  if (!fitsInAvailability(blocks, startTime, endTime, locationId ?? null)) {
+  const endTime = minutesToTime(timeToMinutes(wallTime) + durationMinutes);
+  if (!fitsInAvailability(blocks, wallTime, endTime, locationId ?? null)) {
     const hours = blocks.map((b) => `${b.startTime}–${b.endTime}`).join(", ");
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -730,19 +744,21 @@ export const appRouter = router({
           duration: z.number().optional(),
           status: z.enum(["scheduled", "completed", "cancelled", "no-show"]).default("scheduled"),
           notes: z.string().optional(),
+          // Clinic-local wall-clock the user picked, used for availability checks
+          // (validation-only; not persisted).
+          scheduleDate: z.string().optional(), // "YYYY-MM-DD"
+          scheduleTime: z.string().optional(), // "HH:MM"
         })
       )
       .mutation(async ({ input }) => {
-        if (input.staffId) {
-          await assertStaffAvailable(
-            input.staffId,
-            input.appointmentDate,
-            input.duration ?? 30,
-            input.locationId
-          );
-          await assertNoOverlap(input.staffId, input.appointmentDate, input.duration ?? 30);
+        const { scheduleDate, scheduleTime, ...data } = input;
+        if (data.staffId) {
+          const wallDate = scheduleDate ?? toIsoDate(data.appointmentDate);
+          const wallTime = scheduleTime ?? dateToTime(data.appointmentDate);
+          await assertStaffAvailable(data.staffId, wallDate, wallTime, data.duration ?? 30, data.locationId);
+          await assertNoOverlap(data.staffId, data.appointmentDate, data.duration ?? 30);
         }
-        return await createAppointment(input);
+        return await createAppointment(data);
       }),
 
     getAppointments: protectedProcedure
@@ -792,10 +808,12 @@ export const appRouter = router({
           location: z.string().optional(),
           status: z.enum(["scheduled", "completed", "cancelled", "no-show"]).optional(),
           notes: z.string().optional(),
+          scheduleDate: z.string().optional(), // "YYYY-MM-DD" (validation-only)
+          scheduleTime: z.string().optional(), // "HH:MM" (validation-only)
         })
       )
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
+        const { id, scheduleDate, scheduleTime, ...data } = input;
         // Re-validate availability when the staff member, date, or location changes.
         if (data.staffId !== undefined || data.appointmentDate !== undefined || data.locationId !== undefined) {
           const existing = await getAppointmentById(id);
@@ -804,7 +822,9 @@ export const appRouter = router({
           const locationId = data.locationId ?? existing?.locationId ?? null;
           const duration = existing?.duration ?? 30;
           if (staffId && appointmentDate) {
-            await assertStaffAvailable(staffId, appointmentDate, duration, locationId);
+            const wallDate = scheduleDate ?? toIsoDate(appointmentDate);
+            const wallTime = scheduleTime ?? dateToTime(appointmentDate);
+            await assertStaffAvailable(staffId, wallDate, wallTime, duration, locationId);
             await assertNoOverlap(staffId, appointmentDate, duration, id);
           }
         }
