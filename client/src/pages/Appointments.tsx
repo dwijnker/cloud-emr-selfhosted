@@ -165,6 +165,10 @@ export default function Appointments() {
       appointmentType: appointmentType || undefined,
       status: status as any,
       notes: notes || undefined,
+      // Wall-clock the user picked, so server availability checks are
+      // timezone-independent of where the server runs.
+      scheduleDate: date,
+      scheduleTime: time,
     });
   };
 
