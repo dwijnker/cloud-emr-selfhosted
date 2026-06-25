@@ -20,7 +20,17 @@ function formatTime(t: string) {
 
 export default function Appointments() {
   const [location, navigate] = useLocation();
-  const patientId = parseInt(location.split("/")[2]);
+  // Patient scope: taken from the URL on /patients/:id/appointments, otherwise
+  // chosen from a dropdown on the global /appointments screen.
+  const isPatientScoped = location.startsWith("/patients/");
+  const urlPatientId = parseInt(location.split("/")[2]);
+  const [selectedPatientId, setSelectedPatientId] = useState("");
+  const patientId = isPatientScoped
+    ? urlPatientId
+    : selectedPatientId
+      ? parseInt(selectedPatientId)
+      : NaN;
+  const hasPatient = Number.isFinite(patientId);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Controlled add-appointment form state
@@ -34,9 +44,17 @@ export default function Appointments() {
   const [notes, setNotes] = useState("");
 
   // Queries
+  const { data: patientsList } = trpc.patients.list.useQuery(
+    { limit: 200, offset: 0 },
+    { enabled: !isPatientScoped }
+  );
+  const { data: patient } = trpc.patients.getById.useQuery(
+    { id: patientId },
+    { enabled: hasPatient }
+  );
   const { data: appointments, isLoading, refetch } = trpc.appointments.getAppointments.useQuery(
     { patientId, limit: 100 },
-    { enabled: !!patientId }
+    { enabled: hasPatient }
   );
   const { data: staff } = trpc.staff.list.useQuery({ includeInactive: false });
   const { data: locations } = trpc.locations.list.useQuery({ includeInactive: false });
@@ -130,6 +148,10 @@ export default function Appointments() {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!hasPatient) {
+      toast.error("Please select a patient first");
+      return;
+    }
     if (!date) {
       toast.error("Please choose a date");
       return;
@@ -158,14 +180,38 @@ export default function Appointments() {
 
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Appointments</h1>
-          <p className="text-gray-600">Manage patient appointments and scheduling</p>
+          <p className="text-gray-600">
+            {patient
+              ? `Scheduling for ${patient.firstName} ${patient.lastName}`
+              : "Manage patient appointments and scheduling"}
+          </p>
         </div>
+
+        {/* Patient selector (global screen only) */}
+        {!isPatientScoped && (
+          <div className="mb-6 max-w-sm">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Patient</label>
+            <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a patient" />
+              </SelectTrigger>
+              <SelectContent>
+                {(patientsList ?? []).map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.firstName} {p.lastName}
+                    {p.mrn ? ` (${p.mrn})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Add Appointment Button */}
         <div className="mb-8">
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2" disabled={!hasPatient}>
                 <Plus className="w-4 h-4" />
                 Schedule Appointment
               </Button>
@@ -325,7 +371,11 @@ export default function Appointments() {
         {/* Appointments List */}
         <div>
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">All Appointments</h2>
-          {isLoading ? (
+          {!hasPatient ? (
+            <div className="text-center py-12 text-gray-500">
+              Select a patient to view and schedule appointments.
+            </div>
+          ) : isLoading ? (
             <div className="text-center py-12">Loading appointments...</div>
           ) : appointments && appointments.length > 0 ? (
             <div className="grid gap-4">

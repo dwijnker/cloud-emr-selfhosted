@@ -44,6 +44,7 @@ const contextMenuItems = (patientId?: string) => {
     { icon: Pill, label: "Orders", path: `/patients/${patientId}/orders` },
     { icon: ClipboardList, label: "Prescriptions", path: `/patients/${patientId}/prescriptions` },
     { icon: AlertCircle, label: "Referrals", path: `/patients/${patientId}/referrals` },
+    { icon: Calendar, label: "Appointments", path: `/patients/${patientId}/appointments` },
   ];
 };
 
