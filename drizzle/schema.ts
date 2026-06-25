@@ -375,6 +375,74 @@ export type CardiacOrder = typeof cardiacOrders.$inferSelect;
 export type InsertCardiacOrder = typeof cardiacOrders.$inferInsert;
 
 /**
+ * STAFF & SCHEDULING
+ */
+export const staff = mysqlTable("staff", {
+  id: int("id").autoincrement().primaryKey(),
+  firstName: varchar("firstName", { length: 100 }).notNull(),
+  lastName: varchar("lastName", { length: 100 }).notNull(),
+  staffType: mysqlEnum("staffType", ["doctor", "nurse_practitioner", "dietitian"]).notNull(),
+  specialty: varchar("specialty", { length: 100 }),
+  status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Staff = typeof staff.$inferSelect;
+export type InsertStaff = typeof staff.$inferInsert;
+
+export const locations = mysqlTable("locations", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  address: text("address"),
+  status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Location = typeof locations.$inferSelect;
+export type InsertLocation = typeof locations.$inferInsert;
+
+/**
+ * Recurring weekly availability template for a staff member.
+ * One row per working block (a staff member can have several blocks on the
+ * same weekday, e.g. morning at one location and afternoon at another).
+ */
+export const staffWeeklySchedules = mysqlTable("staffWeeklySchedules", {
+  id: int("id").autoincrement().primaryKey(),
+  staffId: int("staffId").notNull(),
+  locationId: int("locationId"),
+  dayOfWeek: tinyint("dayOfWeek").notNull(), // 0 = Sunday ... 6 = Saturday
+  startTime: varchar("startTime", { length: 5 }).notNull(), // "HH:MM" 24h
+  endTime: varchar("endTime", { length: 5 }).notNull(), // "HH:MM" 24h
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type StaffWeeklySchedule = typeof staffWeeklySchedules.$inferSelect;
+export type InsertStaffWeeklySchedule = typeof staffWeeklySchedules.$inferInsert;
+
+/**
+ * Date-specific overrides that take precedence over the weekly template:
+ * a full "time_off" clears the day; "custom_hours" replaces it with the given block.
+ */
+export const staffScheduleExceptions = mysqlTable("staffScheduleExceptions", {
+  id: int("id").autoincrement().primaryKey(),
+  staffId: int("staffId").notNull(),
+  date: date("date").notNull(),
+  type: mysqlEnum("type", ["time_off", "custom_hours"]).notNull().default("time_off"),
+  locationId: int("locationId"),
+  startTime: varchar("startTime", { length: 5 }), // required for custom_hours
+  endTime: varchar("endTime", { length: 5 }),
+  reason: varchar("reason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type StaffScheduleException = typeof staffScheduleExceptions.$inferSelect;
+export type InsertStaffScheduleException = typeof staffScheduleExceptions.$inferInsert;
+
+/**
  * SCHEDULING & APPOINTMENTS
  */
 export const appointments = mysqlTable("appointments", {
@@ -383,7 +451,9 @@ export const appointments = mysqlTable("appointments", {
   externalId: varchar("externalId", { length: 64 }).unique(),
   appointmentDate: timestamp("appointmentDate").notNull(),
   duration: int("duration"), // minutes
-  provider: varchar("provider", { length: 255 }),
+  staffId: int("staffId"), // FK -> staff.id (preferred over free-text provider)
+  locationId: int("locationId"), // FK -> locations.id
+  provider: varchar("provider", { length: 255 }), // legacy free-text fallback
   appointmentType: varchar("appointmentType", { length: 100 }),
   location: varchar("location", { length: 255 }),
   status: mysqlEnum("status", ["scheduled", "completed", "cancelled", "no-show"]).default("scheduled"),
