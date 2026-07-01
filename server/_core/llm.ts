@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { invokeBedrockLLM } from "./bedrockLlm";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -266,6 +267,12 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  // Provider dispatch: LLM_PROVIDER=bedrock routes to Claude on AWS Bedrock;
+  // anything else uses the OpenAI-compatible endpoint below.
+  if (ENV.llmProvider === "bedrock") {
+    return invokeBedrockLLM(params);
+  }
+
   assertApiKey();
 
   const {
