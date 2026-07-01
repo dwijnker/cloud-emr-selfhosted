@@ -10,6 +10,5 @@ export const ENV = {
   llmProvider: process.env.LLM_PROVIDER ?? "openai",
   awsRegion: process.env.AWS_REGION ?? "us-west-2",
   bedrockApiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "",
-  bedrockModelId:
-    process.env.BEDROCK_MODEL_ID ?? "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  bedrockModelId: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-haiku-4-5",
 };
