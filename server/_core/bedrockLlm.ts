@@ -1,4 +1,4 @@
-import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { ENV } from "./env";
 import type {
   InvokeParams,
@@ -14,20 +14,28 @@ import type {
  *
  * Preserves the OpenAI-compatible invokeLLM contract used across the app
  * (messages in, `choices[0].message.content` out, JSON-schema structured
- * output via `outputSchema`) while calling Claude on Bedrock through the
- * official Anthropic Bedrock SDK. Selected with LLM_PROVIDER=bedrock.
+ * output via `outputSchema`) while calling Claude in Amazon Bedrock.
+ * Selected with LLM_PROVIDER=bedrock.
+ *
+ * Targets Bedrock's Messages-API ("Mantle") endpoint at
+ * https://bedrock-mantle.{region}.api.aws/anthropic — the surface that
+ * console-generated Bedrock API keys (bearer tokens) authenticate against.
+ * Per Anthropic's docs, bearer-token auth uses the standard Anthropic client
+ * with a base_url override; the dedicated Bedrock clients are for SigV4.
+ * Model IDs on this endpoint carry an `anthropic.` prefix and no version
+ * suffix, e.g. `anthropic.claude-haiku-4-5`.
  */
 
-let _client: AnthropicBedrock | null = null;
+let _client: Anthropic | null = null;
 
-function getClient(): AnthropicBedrock {
+function getClient(): Anthropic {
   if (!_client) {
     if (!ENV.bedrockApiKey) {
       throw new Error("AWS_BEARER_TOKEN_BEDROCK is not configured");
     }
-    _client = new AnthropicBedrock({
+    _client = new Anthropic({
       apiKey: ENV.bedrockApiKey, // Bedrock API key (bearer token) auth
-      awsRegion: ENV.awsRegion,
+      baseURL: `https://bedrock-mantle.${ENV.awsRegion}.api.aws/anthropic`,
     });
   }
   return _client;
@@ -151,8 +159,14 @@ export async function invokeBedrockLLM(params: InvokeParams): Promise<InvokeResu
     };
   }
 
-  // Cast: the bedrock SDK's typed params lag the API surface (output_config).
+  // Cast: request is assembled dynamically; output_config may lag the SDK types.
   const response = await client.messages.create(request as never);
+
+  if (!Array.isArray(response?.content)) {
+    throw new Error(
+      `Unexpected Bedrock response shape (no content array): ${JSON.stringify(response).slice(0, 300)}`
+    );
+  }
 
   const textContent = (response.content as Array<{ type: string }>)
     .filter((block): block is AnthropicTextBlock => block.type === "text")
