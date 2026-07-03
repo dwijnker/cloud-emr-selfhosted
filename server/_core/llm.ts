@@ -1,5 +1,6 @@
 import { ENV } from "./env";
 import { invokeBedrockLLM } from "./bedrockLlm";
+import { invokeConverseLLM } from "./converseLlm";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -267,10 +268,14 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  // Provider dispatch: LLM_PROVIDER=bedrock routes to Claude on AWS Bedrock;
+  // Provider dispatch: LLM_PROVIDER=bedrock routes to Claude on AWS Bedrock,
+  // LLM_PROVIDER=converse to any Bedrock model via the Converse API;
   // anything else uses the OpenAI-compatible endpoint below.
   if (ENV.llmProvider === "bedrock") {
     return invokeBedrockLLM(params);
+  }
+  if (ENV.llmProvider === "converse") {
+    return invokeConverseLLM(params);
   }
 
   assertApiKey();
