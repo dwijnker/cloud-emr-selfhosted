@@ -6,7 +6,8 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   adminEmail: process.env.ADMIN_EMAIL ?? "",
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
-  // LLM provider selection: "openai" (OpenAI-compatible endpoint above) or "bedrock"
+  // LLM provider selection: "openai" (OpenAI-compatible endpoint above),
+  // "bedrock" (Claude on Bedrock), or "converse" (any Bedrock model)
   llmProvider: process.env.LLM_PROVIDER ?? "openai",
   // Model sent to the OpenAI-compatible endpoint (LLM_PROVIDER=openai)
   llmModel: process.env.LLM_MODEL ?? "gemini-2.5-flash",
